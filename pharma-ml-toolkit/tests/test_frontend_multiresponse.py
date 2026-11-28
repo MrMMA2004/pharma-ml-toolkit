@@ -94,16 +94,18 @@ def test_the_contract_carries_the_four_new_paths() -> None:
     # (the pin left stale at 142 in that round — caught and trued by
     # the r379 DS-2 round); 143 -> 144 by the r379 DS-2 path;
     # 144 -> 145 by the r380 DS-3 frames/register path; 145 -> 146 by
-    # the r382 ML-4 unsupervised pca sibling path
-    assert len(paths) == 146, f"the contract drifted: {len(paths)} paths"
+    # the r382 ML-4 unsupervised pca sibling path; 146 -> 147 by the
+    # r383 ML-5 drift path; 147 -> 148 by the r383 DL-2 gnn-explain path
+    assert len(paths) == 148, f"the contract drifted: {len(paths)} paths"
     # 96 -> 97 by the r375 ML-3 train-lane split section (the
     # TrainSplitSpec request DTO, one schema; no new paths)
     # 97 -> 98 by the r378 GEN-2 GenerationMetricsRequest DTO (this
     # pin left stale at 97 in that round — caught and trued by the
     # r379 DS-2 round); 98 -> 99 by the r379 DS-2 StandardizeRequest;
     # 99 -> 100 by the r380 DS-3 FramesRegisterRequest; 100 -> 101 by
-    # the r382 ML-4 PcaRequest DTO
-    assert len(schema["components"]["schemas"]) == 101
+    # the r382 ML-4 PcaRequest DTO; 101 -> 102 by the r383 ML-5
+    # DriftRequest DTO; 102 -> 103 by the r383 DL-2 GnnExplainRequest DTO
+    assert len(schema["components"]["schemas"]) == 103
     for path in (
         "/api/v1/multiresponse/registry",
         "/api/v1/multiresponse/train",

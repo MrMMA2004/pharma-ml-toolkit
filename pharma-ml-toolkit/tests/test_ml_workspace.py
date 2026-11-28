@@ -161,6 +161,15 @@ def test_ml_rest_surface_covered() -> None:
         assert path in real, (
             f"routes/applicability_domain.py stopped declaring {path}"
         )
+    # the ML-5 consumption pin (the roadmap's row 12 acceptance): the
+    # drift path -- a GUI drift readout before re-scoring -- stays
+    # consumed by the ml client
+    assert "/api/v1/ml/drift" in carried, (
+        "the ml client stopped calling /api/v1/ml/drift"
+    )
+    assert "/api/v1/ml/drift" in real, (
+        "routes/ml.py stopped declaring /api/v1/ml/drift"
+    )
     # the §8 workflow-builder lane's own calls (the r323 GUI leg over
     # the r322 route family)
     for path in ("/api/v1/workflow/steps", "/api/v1/workflow/templates",

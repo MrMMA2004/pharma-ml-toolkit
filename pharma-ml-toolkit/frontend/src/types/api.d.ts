@@ -659,6 +659,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dl/gnn-explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Gnn Explain
+         * @description DL-2 — the graph models' edge attribution (sync by design).
+         *
+         *     The REAL `pharmaml.ml.gnnxai` engine over a session-trained GNN:
+         *     the chosen explainer's per-edge importance (aligned with each
+         *     graph's own `edge_index` columns), the fidelity_plus /
+         *     fidelity_minus drops, the sparsity, and the deterministic
+         *     circular layout the frontend renders the sized-edge scatter
+         *     over.  The explained subgraph never exceeds the full graph —
+         *     `top_edges` is a subset of the edge columns by construction.
+         */
+        post: operations["gnn_explain_api_v1_dl_gnn_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dl/gnn-predict": {
         parameters: {
             query?: never;
@@ -1408,6 +1436,33 @@ export interface paths {
         put?: never;
         /** Xvg */
         post: operations["xvg_api_v1_md_xvg_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drift
+         * @description ML-5 — the batch-level distribution-shift verdict (sync).
+         *
+         *     ``detect_drift`` over the stored frames: the reference (the
+         *     model's own training dataset restricted to its feature
+         *     vocabulary, or a registered dataset) vs the current registered
+         *     dataset.  Per-feature PSI + KS, the credit-risk verdicts, the
+         *     drifted list worst-first — the engine's own exported constants
+         *     ride the payload so the GUI never re-encodes a threshold.
+         */
+        post: operations["drift_api_v1_ml_drift_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3239,10 +3294,37 @@ export interface components {
              */
             mode: "job" | "sync";
             /**
+             * N Trials
+             * @default 12
+             */
+            n_trials: number;
+            /**
              * Network
              * @enum {string}
              */
             network: "deep_mlp_classifier" | "deep_mlp_regressor" | "residual_mlp_classifier" | "residual_mlp_regressor" | "tabular_transformer_classifier" | "tabular_transformer_regressor";
+            /**
+             * Sampler
+             * @default tpe
+             * @enum {string}
+             */
+            sampler: "tpe" | "random";
+            /** Search */
+            search?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            } | null;
+            /**
+             * Seed
+             * @default 0
+             */
+            seed: number;
+            /**
+             * Tune
+             * @default false
+             */
+            tune: boolean;
         };
         /** DescriptorsRequest */
         DescriptorsRequest: {
@@ -3484,6 +3566,25 @@ export interface components {
             title: string;
             /** Vd */
             vd: number;
+        };
+        /**
+         * DriftRequest
+         * @description POST /api/v1/ml/drift — ML-5's distribution-shift body.
+         *
+         *     Exactly one reference source: the training dataset of a
+         *     session-trained model (``model_id`` — the re-scoring lane the
+         *     roadmap names) or a registered dataset (``dataset_id``).  The
+         *     current batch is always a registered dataset (``new_dataset_id``).
+         */
+        DriftRequest: {
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Features */
+            features?: string[] | null;
+            /** Model Id */
+            model_id?: string | null;
+            /** New Dataset Id */
+            new_dataset_id: string;
         };
         /**
          * DrugResponseAnalyzeRequest
@@ -3895,6 +3996,38 @@ export interface components {
             generated: string[];
             /** Reference */
             reference?: string[] | null;
+        };
+        /**
+         * GnnExplainRequest
+         * @description POST /api/v1/dl/gnn-explain — DL-2's edge-attribution body.
+         */
+        GnnExplainRequest: {
+            /** Graphs */
+            graphs: components["schemas"]["GnnGraphSpec"][];
+            /** Iters */
+            iters?: number | null;
+            /** Labels */
+            labels?: number[] | null;
+            /**
+             * Method
+             * @default gnnexplainer
+             * @enum {string}
+             */
+            method: "gnnexplainer" | "pgexplainer" | "attention" | "subgraphx";
+            /** Model Id */
+            model_id: string;
+            /**
+             * Seed
+             * @default 0
+             */
+            seed: number;
+            /** Target */
+            target?: number | null;
+            /**
+             * Top K
+             * @default 8
+             */
+            top_k: number;
         };
         /**
          * GnnGraphSpec
@@ -5441,6 +5574,37 @@ export interface components {
              */
             test_size: number;
         };
+        /**
+         * UnsupervisedPcaRequest
+         * @description POST /api/v1/unsupervised/pca — the ML-4 PCA sibling.
+         *
+         *     The unique component name follows the family's anti-collision
+         *     rule (the ADAnalyzeRequest precedent): routes/md.py carries its
+         *     own ``PcaRequest`` for ``POST /api/v1/md/pca``, and FastAPI's
+         *     collision fallback picks the plain-name winner nondeterministically
+         *     (hash-seed-dependent set iteration) — unique class names keep the
+         *     exported contract byte-stable across processes.
+         */
+        UnsupervisedPcaRequest: {
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Components
+             * @description component count; omit to keep the engine's own cap min(10, n_samples, n_features)
+             */
+            n_components?: number | null;
+            /**
+             * Scale
+             * @default true
+             */
+            scale: boolean;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -5544,30 +5708,6 @@ export interface components {
             moving_average_window: number;
             /** Text */
             text: string;
-        };
-        /**
-         * PcaRequest
-         * @description POST /api/v1/unsupervised/pca — the ML-4 PCA sibling.
-         */
-        pharmaml__api__routes__unsupervised__PcaRequest: {
-            /** Dataset Id */
-            dataset_id: string;
-            /**
-             * Mode
-             * @default job
-             * @enum {string}
-             */
-            mode: "job" | "sync";
-            /**
-             * N Components
-             * @description component count; omit to keep the engine's own cap min(10, n_samples, n_features)
-             */
-            n_components?: number | null;
-            /**
-             * Scale
-             * @default true
-             */
-            scale: boolean;
         };
     };
     responses: never;
@@ -6918,6 +7058,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CnnTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    gnn_explain_api_v1_dl_gnn_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GnnExplainRequest"];
             };
         };
         responses: {
@@ -8329,6 +8504,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["XvgRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drift_api_v1_ml_drift_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriftRequest"];
             };
         };
         responses: {
@@ -10018,7 +10228,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["pharmaml__api__routes__unsupervised__PcaRequest"];
+                "application/json": components["schemas"]["UnsupervisedPcaRequest"];
             };
         };
         responses: {

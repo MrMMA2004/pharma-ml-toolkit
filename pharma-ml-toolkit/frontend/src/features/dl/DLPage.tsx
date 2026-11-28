@@ -37,7 +37,7 @@ import {
   DL_ACTIVATIONS,
   DL_HYPERPARAM_KEYS,
   dlApi,
-  parseDLTrainResult,
+  parseDLTuneResult,
   parseTrainingMetricsPayload,
   parseGnnInlineGraphs,
   parseGnnTrainResult,
@@ -49,7 +49,11 @@ import {
   type CnnTrainResult,
   type DLModelView,
   type DLNetworkName,
+  type DLTrainOptionsTune,
+  type DLTuneReport,
   type GnnConv,
+  type GnnExplainGraphRow,
+  type GnnExplainResult,
   type GnnInlineSource,
   type GnnPool,
   type GnnPredictResponse,
@@ -277,6 +281,89 @@ function validateHiddenLayers(text: string): number[] | null {
   return parsed as number[];
 }
 
+/** The DL-1 search-block sample — the same paste-lane pattern. */
+const TUNE_SEARCH_SAMPLE = `{
+  "learning_rate": {"low": 0.001, "high": 0.3, "log": true},
+  "dropout": {"low": 0.05, "high": 0.5},
+  "hidden_layers": {"choices": [[32], [64, 32], [128, 64]]}
+}`;
+
+/**
+ * DL-1 — parse + pre-flight the search block: the client mirrors
+ * the route's own contract (each key over the constructor vocabulary,
+ * each entry choices or low/high) so a doomed search is refused
+ * here, honestly, never fired.
+ */
+function parseTuneSearch(text: string): Record<string, Record<string, unknown>> {
+  const trimmed = text.trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    throw new Error(
+      `invalid JSON — ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      "the search block must be a JSON object of {key: {choices: [...]} or {low, high}}",
+    );
+  }
+  const accepted = new Set(DL_HYPERPARAM_KEYS);
+  const clean: Record<string, Record<string, unknown>> = {};
+  for (const [key, spec] of Object.entries(parsed)) {
+    if (!accepted.has(key)) {
+      throw new Error(
+        `unknown search key ${JSON.stringify(key)}; the route's own ` +
+          `vocabulary is ${DL_HYPERPARAM_KEYS.join(", ")}`,
+      );
+    }
+    if (typeof spec !== "object" || spec === null || Array.isArray(spec)) {
+      throw new Error(
+        `the search entry for ${JSON.stringify(key)} must be an object with ` +
+          "either choices: [...] or low/high bounds",
+      );
+    }
+    const entry = spec as Record<string, unknown>;
+    if ("choices" in entry) {
+      if (!Array.isArray(entry["choices"]) || entry["choices"].length === 0) {
+        throw new Error(
+          `the search entry for ${JSON.stringify(key)} carries an empty ` +
+            "or non-list choices block",
+        );
+      }
+    } else if ("low" in entry && "high" in entry) {
+      const low = entry["low"];
+      const high = entry["high"];
+      if (
+        typeof low !== "number" ||
+        !Number.isFinite(low) ||
+        typeof high !== "number" ||
+        !Number.isFinite(high)
+      ) {
+        throw new Error(
+          `the search bounds for ${JSON.stringify(key)} must be numbers`,
+        );
+      }
+      if (!(low < high)) {
+        throw new Error(
+          `the search bounds for ${JSON.stringify(key)} must satisfy low < high`,
+        );
+      }
+    } else {
+      throw new Error(
+        `the search entry for ${JSON.stringify(key)} carries neither ` +
+          "choices nor low/high bounds",
+      );
+    }
+    clean[key] = entry;
+  }
+  if (Object.keys(clean).length === 0) {
+    throw new Error("the search block is empty — the tune lane needs at least one key");
+  }
+  return clean;
+}
+
 /** The model-metadata card — the train job's relayed result view. */
 function DLModelCard({ model }: { model: DLModelView }) {
   return (
@@ -384,6 +471,138 @@ function GnnModelCard({ result }: { result: GnnTrainResult }) {
   );
 }
 
+/** DL-2 — one explained graph: the fidelity line + the edge table
+ *  (top rows highlighted) + the sized-edge scatter over the
+ *  backend's own circular layout. */
+function GnnExplainRow({ row }: { row: GnnExplainGraphRow }) {
+  const topSet = new Set(row.top_edges);
+  const nodes = row.layout.nodes;
+  // the edge segments (null-separated, one trace) + the sized-edge
+  // midpoints (the score-scaled markers) + the node markers
+  const segX: (number | null)[] = [];
+  const segY: (number | null)[] = [];
+  const midX: number[] = [];
+  const midY: number[] = [];
+  const midSize: number[] = [];
+  const midColor: string[] = [];
+  for (let i = 0; i < row.edge_index.length; i++) {
+    const endpoints = row.edge_index[i];
+    if (endpoints === undefined || endpoints.length < 2) {
+      continue;
+    }
+    const [src, dst] = [endpoints[0], endpoints[1]];
+    const srcPos = nodes[src ?? 0];
+    const dstPos = nodes[dst ?? 0];
+    if (srcPos === undefined || dstPos === undefined) {
+      continue;
+    }
+    segX.push(srcPos[0] ?? 0, dstPos[0] ?? 0, null);
+    segY.push(srcPos[1] ?? 0, dstPos[1] ?? 0, null);
+    const score = row.scores[i] ?? 0;
+    midX.push(((srcPos[0] ?? 0) + (dstPos[0] ?? 0)) / 2);
+    midY.push(((srcPos[1] ?? 0) + (dstPos[1] ?? 0)) / 2);
+    midSize.push(4 + 36 * score);
+    midColor.push(topSet.has(i) ? "#d97706" : "#a8a29e");
+  }
+  const traces: PlotTrace[] = [
+    {
+      type: "scatter",
+      mode: "lines",
+      name: "edges",
+      x: segX,
+      y: segY,
+      line: { color: "#d6d3d1", width: 1 },
+      showlegend: false,
+    },
+    {
+      type: "scatter",
+      mode: "markers",
+      name: "nodes",
+      x: nodes.map((pos) => pos[0] ?? 0),
+      y: nodes.map((pos) => pos[1] ?? 0),
+      marker: { color: "#57534e", size: 8, symbol: "circle" },
+      showlegend: false,
+    },
+    {
+      type: "scatter",
+      mode: "markers",
+      name: "edge importance",
+      x: midX,
+      y: midY,
+      marker: {
+        color: midColor,
+        size: midSize,
+        sizemode: "area",
+        sizeref: 2.5,
+      },
+      text: row.scores.map(
+        (score, i) =>
+          `edge ${i} (${row.edge_index[i]?.[0]}→${row.edge_index[i]?.[1]}): ${score.toFixed(3)}${topSet.has(i) ? " (top)" : ""}`,
+      ),
+      hovertemplate: "%{text}<extra></extra>",
+      showlegend: false,
+    },
+  ];
+  return (
+    <div className="mt-3 rounded-lg border border-[var(--color-border)] p-3">
+      <p className="text-xs text-[var(--color-foreground)]">
+        graph {row.index} · {row.n_nodes} nodes · {row.n_edges} edges ·
+        method {row.method} · target class {row.target_class} ·
+        fidelity+ {formatValue(row.fidelity_plus)} · fidelity−{" "}
+        {formatValue(row.fidelity_minus)} · sparsity{" "}
+        {formatValue(row.sparsity)}
+      </p>
+      <div className="mt-2 grid gap-3 lg:grid-cols-2">
+        <div className="max-h-64 overflow-y-auto rounded-md border border-[var(--color-border)]">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-[var(--color-muted)] text-left text-[var(--color-muted-foreground)]">
+                <th className="px-2 py-1.5 font-medium">edge</th>
+                <th className="px-2 py-1.5 font-medium">importance</th>
+                <th className="px-2 py-1.5 font-medium">top</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.scores.map((score, i) => {
+                const isTop = topSet.has(i);
+                return (
+                  <tr
+                    key={i}
+                    data-top={isTop ? "true" : undefined}
+                    className={`border-t border-[var(--color-border)] ${
+                      isTop
+                        ? "bg-[var(--color-accent)]/40 font-medium text-[var(--color-foreground)]"
+                        : ""
+                    }`}
+                  >
+                    <td className="px-2 py-1.5 font-mono">
+                      {row.edge_index[i]?.[0]}→{row.edge_index[i]?.[1]}
+                    </td>
+                    <td className="px-2 py-1.5">{formatValue(score)}</td>
+                    <td className="px-2 py-1.5">{isTop ? "top" : ""}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="rounded-md border border-[var(--color-border)] p-2">
+          <PlotlyFigure
+            data={traces}
+            layout={{
+              showlegend: false,
+              margin: { t: 8, r: 8, b: 8, l: 8 },
+              xaxis: { zeroline: false, showgrid: false },
+              yaxis: { zeroline: false, showgrid: false, scaleanchor: "x" },
+            }}
+            ariaLabel={`graph ${row.index} — the sized-edge scatter over the backend's own circular layout (the marker size rides the edge importance)`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DLPage() {
   // stage 1: the dataset registry + selection
   const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
@@ -419,6 +638,16 @@ export function DLPage() {
   const [trainError, setTrainError] = useState<string | null>(null);
   const [trainBusy, setTrainBusy] = useState(false);
   const [trainedModel, setTrainedModel] = useState<DLModelView | null>(null);
+
+  // stage 7b (DL-1): the hyperparameter search lane — tune instead
+  // of one fixed configuration (the same route, `tune: true`, the
+  // in-house TPE/Random engine under it)
+  const [tuneEnabled, setTuneEnabled] = useState(false);
+  const [tuneSearchText, setTuneSearchText] = useState(TUNE_SEARCH_SAMPLE);
+  const [tuneNTrials, setTuneNTrials] = useState(12);
+  const [tuneSampler, setTuneSampler] = useState<"tpe" | "random">("tpe");
+  const [tuneSeed, setTuneSeed] = useState(0);
+  const [tuneResult, setTuneResult] = useState<DLTuneReport | null>(null);
 
   // stage 8: monitor (the live per-epoch telemetry)
   const [metricsPoints, setMetricsPoints] = useState<readonly TrainingMetricsPoint[]>([]);
@@ -475,6 +704,21 @@ export function DLPage() {
   const [gnnPredictProba, setGnnPredictProba] = useState(true);
   const [gnnPredictBusy, setGnnPredictBusy] = useState(false);
   const [gnnPredictResult, setGnnPredictResult] = useState<GnnPredictResponse | null>(null);
+
+  // DL-2: the GNN lane's edge-attribution card — the explainability
+  // state (the same inline-graphs paste lane the predict card rides)
+  const [gnnExplainText, setGnnExplainText] = useState("");
+  const [gnnExplainMethod, setGnnExplainMethod] = useState<
+    "gnnexplainer" | "pgexplainer" | "attention" | "subgraphx"
+  >("gnnexplainer");
+  const [gnnExplainTopK, setGnnExplainTopK] = useState(8);
+  const [gnnExplainSeed, setGnnExplainSeed] = useState(0);
+  const [gnnExplainItersText, setGnnExplainItersText] = useState("");
+  const [gnnExplainTargetText, setGnnExplainTargetText] = useState("");
+  const [gnnExplainLabelsText, setGnnExplainLabelsText] = useState("");
+  const [gnnExplainBusy, setGnnExplainBusy] = useState(false);
+  const [gnnExplainError, setGnnExplainError] = useState<string | null>(null);
+  const [gnnExplainResult, setGnnExplainResult] = useState<GnnExplainResult | null>(null);
 
   // the sequence-CNN lane (part18 §5.2 — the convolutional lane over
   // 3-D sequences or the backend's motif fixture, its OWN predict path)
@@ -663,7 +907,10 @@ export function DLPage() {
     ttrFeedforward,
   ]);
 
-  // stage 7: train (job mode — the backend's default lane)
+  // stage 7: train (job mode — the backend's default lane); with the
+  // DL-1 search lane armed, the SAME route rides `tune: true` with
+  // the parsed search block (the client pre-flight above mirrors the
+  // route's own contract so a doomed search is refused here)
   const handleTrain = useCallback(async () => {
     if (selectedId === null || selectedNetwork === "") {
       return;
@@ -681,10 +928,28 @@ export function DLPage() {
       );
       return;
     }
+    let tune: DLTrainOptionsTune | null = null;
+    if (tuneEnabled) {
+      try {
+        const search = parseTuneSearch(tuneSearchText);
+        tune = {
+          search,
+          nTrials: tuneNTrials,
+          sampler: tuneSampler,
+          seed: tuneSeed,
+        };
+      } catch (error) {
+        setTrainError(
+          error instanceof Error ? error.message : String(error),
+        );
+        return;
+      }
+    }
     setTrainBusy(true);
     setTrainError(null);
     setTrainJobId(null);
     setTrainedModel(null);
+    setTuneResult(null);
     setMetricsPoints([]);
     setMonitorError(null);
     try {
@@ -692,6 +957,7 @@ export function DLPage() {
         datasetId: selectedId,
         network: selectedNetwork,
         hyperparams,
+        tune,
         mode: "job",
       });
       if (response.mode === "job") {
@@ -702,13 +968,16 @@ export function DLPage() {
     } finally {
       setTrainBusy(false);
     }
-  }, [selectedId, selectedNetwork, buildHyperparams]);
+  }, [selectedId, selectedNetwork, buildHyperparams, tuneEnabled, tuneSearchText, tuneNTrials, tuneSampler, tuneSeed]);
 
-  // the train job's result IS `{model: DLModelView}` — the
-  // authoritative REST relay, parsed at runtime
+  // the train job's result IS `{model: DLModelView}` on the
+  // fixed-config lane and `{model, tune}` on the DL-1 search lane —
+  // the authoritative REST relay, parsed at runtime
   const handleTrainResult = useCallback((result: unknown) => {
     try {
-      setTrainedModel(parseDLTrainResult(result, "dl train result"));
+      const parsed = parseDLTuneResult(result, "dl train result");
+      setTrainedModel(parsed.model);
+      setTuneResult(parsed.tune);
     } catch (error) {
       setTrainError(describeError(error));
     }
@@ -1025,6 +1294,122 @@ export function DLPage() {
       setGnnPredictBusy(false);
     }
   }, [gnnTrainResult, gnnPredictText, gnnPredictProba]);
+
+  // DL-2: the edge-attribution lane — the same inline-graphs paste
+  // the predict card rides, through the gnnxai engine; the
+  // pre-flight mirrors the route's own contract (labels ride the
+  // pgexplainer lane only, one label per graph, the iters knob on
+  // the optimizer explainers only) so a doomed request is refused
+  // here, honestly, never fired
+  const handleGnnExplain = useCallback(async () => {
+    if (gnnTrainResult === null) {
+      return;
+    }
+    setGnnExplainBusy(true);
+    setGnnExplainError(null);
+    setGnnExplainResult(null);
+    try {
+      const parsed = parseGnnInlineGraphs(gnnExplainText, "predict");
+      if (parsed === null || parsed.graphs.length === 0) {
+        throw new Error(
+          'the explain lane needs a graphs block — {"graphs": [...]} ' +
+            "(the same shape the predict card rides, no labels)",
+        );
+      }
+      let labels: number[] | null = null;
+      const labelsTrimmed = gnnExplainLabelsText.trim();
+      if (labelsTrimmed !== "") {
+        if (gnnExplainMethod !== "pgexplainer") {
+          throw new Error(
+            "labels ride the pgexplainer lane only (its scorer trains " +
+              "over the request's own labeled graphs)",
+          );
+        }
+        let parsedLabels: unknown;
+        try {
+          parsedLabels = JSON.parse(labelsTrimmed);
+        } catch (error) {
+          throw new Error(
+            `the labels block is not valid JSON — ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+        if (
+          !Array.isArray(parsedLabels) ||
+          parsedLabels.some(
+            (label) =>
+              typeof label !== "number" || !Number.isInteger(label),
+          )
+        ) {
+          throw new Error(
+            "the labels block must be a JSON list of integers",
+          );
+        }
+        labels = parsedLabels as number[];
+        if (labels.length !== parsed.graphs.length) {
+          throw new Error(
+            `labels carries ${labels.length} entries for ` +
+              `${parsed.graphs.length} graphs — exactly one per graph`,
+          );
+        }
+      }
+      const itersText = gnnExplainItersText.trim();
+      let iters: number | null = null;
+      if (itersText !== "") {
+        if (
+          gnnExplainMethod !== "gnnexplainer" &&
+          gnnExplainMethod !== "pgexplainer"
+        ) {
+          throw new Error(
+            "the iters knob rides the optimizer explainers only " +
+              "(gnnexplainer/pgexplainer); subgraphx/attention carry " +
+              "their own sampling scales",
+          );
+        }
+        iters = Number(itersText);
+        if (!Number.isInteger(iters) || (iters ?? 0) < 10 || (iters ?? 0) > 2000) {
+          throw new Error(
+            "iters must be an integer in [10, 2000] (the route's own bound)",
+          );
+        }
+      }
+      const targetText = gnnExplainTargetText.trim();
+      let target: number | null = null;
+      if (targetText !== "") {
+        target = Number(targetText);
+        if (!Number.isInteger(target) || target < 0) {
+          throw new Error(
+            "the target class must be a non-negative integer (the model's own class index)",
+          );
+        }
+      }
+      const response = await dlApi.gnnExplain({
+        modelId: gnnTrainResult.model.model_id,
+        graphs: parsed.graphs,
+        method: gnnExplainMethod,
+        topK: gnnExplainTopK,
+        seed: gnnExplainSeed,
+        target,
+        labels,
+        iters,
+      });
+      setGnnExplainResult(response);
+    } catch (error) {
+      setGnnExplainError(describeError(error));
+    } finally {
+      setGnnExplainBusy(false);
+    }
+  }, [
+    gnnTrainResult,
+    gnnExplainText,
+    gnnExplainMethod,
+    gnnExplainTopK,
+    gnnExplainSeed,
+    gnnExplainItersText,
+    gnnExplainTargetText,
+    gnnExplainLabelsText,
+  ]);
 
   // the sequence-CNN lane's train (job mode — the estimator's own
   // on_epoch drives the per-epoch training.metrics stream)
@@ -1749,7 +2134,156 @@ export function DLPage() {
       >
         <Card>
           <CardContent>
-            <div className="flex flex-wrap items-center gap-3">
+            {/* DL-1: the hyperparameter search lane — the same route
+                with tune: true (the in-house TPE/Random engine under
+                it); the fixed-config controls above stay the base the
+                candidates ride on top of */}
+            <div className="rounded-lg border border-[var(--color-border)] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 text-xs text-[var(--color-muted-foreground)]">
+                  <input
+                    type="checkbox"
+                    aria-label="arm the hyperparameter search"
+                    checked={tuneEnabled}
+                    onChange={(event) => setTuneEnabled(event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  search the hyperparameters instead of one fixed configuration
+                </label>
+                <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                  DL-1 · the in-house TPE/Random engine
+                </span>
+              </div>
+              {tuneEnabled ? (
+                <>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      the search block (one JSON object; each key over the
+                      route&apos;s own constructor vocabulary — choices, or
+                      low/high with optional log)
+                      <textarea
+                        aria-label="the tune search block"
+                        value={tuneSearchText}
+                        onChange={(event) => setTuneSearchText(event.target.value)}
+                        rows={7}
+                        spellCheck={false}
+                        className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                      />
+                    </label>
+                    <div className="flex flex-col justify-center gap-3 text-xs text-[var(--color-muted-foreground)]">
+                      <label className="text-xs">
+                        n_trials
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={tuneNTrials}
+                          onChange={(event) => setTuneNTrials(Number(event.target.value))}
+                          className="mt-1 ml-2 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                        />
+                      </label>
+                      <label className="text-xs">
+                        sampler
+                        <select
+                          aria-label="the tune sampler"
+                          value={tuneSampler}
+                          onChange={(event) => setTuneSampler(event.target.value as "tpe" | "random")}
+                          className="mt-1 ml-2 block w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                        >
+                          <option value="tpe">tpe</option>
+                          <option value="random">random</option>
+                        </select>
+                      </label>
+                      <label className="text-xs">
+                        seed
+                        <input
+                          type="number"
+                          min={0}
+                          value={tuneSeed}
+                          onChange={(event) => setTuneSeed(Number(event.target.value))}
+                          className="mt-1 ml-2 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    `POST /api/v1/dl/train` with `tune: true` — each candidate
+                    is built and fit on a seeded train side and scored on the
+                    held-out val side (accuracy / R²); cancellation lands
+                    between trials; the winner refits on the full data and
+                    registers like any trained model. The controls above stay
+                    the base every candidate rides on top of (keep epochs low
+                    for a fast search).
+                  </p>
+                </>
+              ) : null}
+              {tuneResult !== null ? (
+                <div className="mt-3">
+                  <p className="text-xs text-[var(--color-foreground)]">
+                    <span className="font-semibold">
+                      best of {tuneResult.n_trials} trial(s)
+                    </span>{" "}
+                    — score {formatValue(tuneResult.best_score)} · refit{" "}
+                    {formatValue(tuneResult.refit_score)} · sampler{" "}
+                    {tuneResult.sampler} (seed {tuneResult.seed}) · best{" "}
+                    {JSON.stringify(tuneResult.best_params)}
+                  </p>
+                  <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[var(--color-muted)] text-left text-[var(--color-muted-foreground)]">
+                          <th className="px-2 py-1.5 font-medium">#</th>
+                          <th className="px-2 py-1.5 font-medium">params</th>
+                          <th className="px-2 py-1.5 font-medium">score</th>
+                          <th className="px-2 py-1.5 font-medium">objective</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tuneResult.trials.map((trial) => {
+                          // the study's own convention: the best is
+                          // the smallest objective value (the negated
+                          // score) — the argmin row IS the reported
+                          // best configuration
+                          const bestValue = Math.min(
+                            ...tuneResult.trials.map((t) => t.value),
+                          );
+                          const isBest = trial.value === bestValue;
+                          return (
+                            <tr
+                              key={trial.number}
+                              data-best={isBest ? "true" : undefined}
+                              className={`border-t border-[var(--color-border)] ${
+                                isBest
+                                  ? "bg-[var(--color-accent)]/40 font-medium"
+                                  : ""
+                              }`}
+                            >
+                              <td className="px-2 py-1.5">{trial.number}</td>
+                              <td className="px-2 py-1.5 font-mono">
+                                {JSON.stringify(trial.params)}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {formatValue(-trial.value)}
+                              </td>
+                              <td className="px-2 py-1.5 text-[var(--color-muted-foreground)]">
+                                {formatValue(trial.value)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    the objective column rides the study&apos;s own
+                    smaller-is-better convention (the negated score); the
+                    score column is the honest bigger-is-better verdict
+                    (accuracy / R² on the held-out carve).
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
                 size="sm"
                 disabled={
@@ -2471,6 +3005,158 @@ export function DLPage() {
                 the backend’s own 422 verbatim (“the GNN was trained on W-wide
                 node features; graph i has V”), never a silent failure.
               </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* DL-2: the edge-attribution card — the gnnxai engine's
+            per-edge importance + the sized-edge scatter over the
+            backend's own circular layout */}
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Edge attribution (GNN explainability)</CardTitle>
+            <CardDescription>
+              DL-2 — `/api/v1/dl/gnn-explain`, the REAL gnnxai engine: the
+              per-edge importance + the fidelity verdicts over the trained
+              graph model (the role SHAP plays for the tabular models)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {gnnTrainResult === null ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Train a graph model above first — the explainability lane
+                runs over the session-trained GNN.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    method
+                    <select
+                      aria-label="the explain method"
+                      value={gnnExplainMethod}
+                      onChange={(event) =>
+                        setGnnExplainMethod(
+                          event.target.value as
+                            | "gnnexplainer"
+                            | "pgexplainer"
+                            | "attention"
+                            | "subgraphx",
+                        )
+                      }
+                      className="mt-1 block w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      <option value="gnnexplainer">gnnexplainer</option>
+                      <option value="pgexplainer">pgexplainer</option>
+                      <option value="attention">attention</option>
+                      <option value="subgraphx">subgraphx</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    top_k
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={gnnExplainTopK}
+                      onChange={(event) => setGnnExplainTopK(Number(event.target.value))}
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    seed
+                    <input
+                      type="number"
+                      min={0}
+                      value={gnnExplainSeed}
+                      onChange={(event) => setGnnExplainSeed(Number(event.target.value))}
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    iters (optimizer methods)
+                    <input
+                      type="number"
+                      min={10}
+                      max={2000}
+                      value={gnnExplainItersText}
+                      onChange={(event) => setGnnExplainItersText(event.target.value)}
+                      placeholder="engine default"
+                      className="mt-1 w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    target class
+                    <input
+                      type="number"
+                      min={0}
+                      value={gnnExplainTargetText}
+                      onChange={(event) => setGnnExplainTargetText(event.target.value)}
+                      placeholder="argmax"
+                      className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    labels (pgexplainer only — JSON list)
+                    <input
+                      type="text"
+                      value={gnnExplainLabelsText}
+                      onChange={(event) => setGnnExplainLabelsText(event.target.value)}
+                      placeholder="[0, 1]"
+                      className="mt-1 w-28 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+                    />
+                  </label>
+                </div>
+                <label className="mt-3 block text-xs text-[var(--color-muted-foreground)]">
+                  graphs to explain (JSON — the same shape as the predict block)
+                  <textarea
+                    aria-label="the graphs to explain"
+                    value={gnnExplainText}
+                    onChange={(event) => setGnnExplainText(event.target.value)}
+                    rows={5}
+                    placeholder='{"graphs": [{"x": [[…]], "edge_index": [[…], […]]}, …]}'
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-2 font-mono text-xs"
+                  />
+                </label>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button
+                    size="sm"
+                    disabled={gnnExplainBusy || gnnExplainText.trim() === ""}
+                    onClick={() => void handleGnnExplain()}
+                  >
+                    {gnnExplainBusy ? "Explaining…" : "Explain the edges"}
+                  </Button>
+                  <span className="text-xs text-[var(--color-muted-foreground)]">
+                    model {gnnTrainResult.model.model_id} · sync · method{" "}
+                    {gnnExplainMethod} · masked forward passes
+                  </span>
+                </div>
+                {gnnExplainError !== null ? (
+                  <div className="mt-3"><ErrorBanner message={gnnExplainError} /></div>
+                ) : null}
+                {gnnExplainResult !== null ? (
+                  <div className="mt-3">
+                    <p className="text-xs text-[var(--color-muted-foreground)]">
+                      {gnnExplainResult.graphs.length} graph(s) explained ·
+                      top_k {gnnExplainResult.top_k} · seed{" "}
+                      {gnnExplainResult.seed}
+                    </p>
+                    {gnnExplainResult.graphs.map((row) => (
+                      <GnnExplainRow key={row.index} row={row} />
+                    ))}
+                  </div>
+                ) : null}
+                <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+                  The lane rides `POST /api/v1/dl/gnn-explain` — the
+                  gnnxai engine’s per-edge scores aligned with each graph’s
+                  own edge_index columns, the fidelity_plus/minus drops, and
+                  the deterministic circular layout (the sized-edge
+                  scatter’s canvas). The `pgexplainer` lane trains its
+                  parametric scorer over the request’s own labeled graphs
+                  (one label per graph); the `attention` lane needs a GAT
+                  model (the engine’s own honest refusal otherwise).
+                </p>
+              </>
             )}
           </CardContent>
         </Card>

@@ -1468,6 +1468,13 @@
             "title": "Mode",
             "type": "string"
           },
+          "n_trials": {
+            "default": 12,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "N Trials",
+            "type": "integer"
+          },
           "network": {
             "enum": [
               "deep_mlp_classifier",
@@ -1479,6 +1486,42 @@
             ],
             "title": "Network",
             "type": "string"
+          },
+          "sampler": {
+            "default": "tpe",
+            "enum": [
+              "tpe",
+              "random"
+            ],
+            "title": "Sampler",
+            "type": "string"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          },
+          "seed": {
+            "default": 0,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "tune": {
+            "default": false,
+            "title": "Tune",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1943,6 +1986,57 @@
           "vd"
         ],
         "title": "DoseAccumulationRequest",
+        "type": "object"
+      },
+      "DriftRequest": {
+        "description": "POST /api/v1/ml/drift \u2014 ML-5's distribution-shift body.\n\nExactly one reference source: the training dataset of a\nsession-trained model (``model_id`` \u2014 the re-scoring lane the\nroadmap names) or a registered dataset (``dataset_id``).  The\ncurrent batch is always a registered dataset (``new_dataset_id``).",
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "features": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Features"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "new_dataset_id": {
+            "title": "New Dataset Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_dataset_id"
+        ],
+        "title": "DriftRequest",
         "type": "object"
       },
       "DrugResponseAnalyzeRequest": {
@@ -2745,6 +2839,95 @@
           "generated"
         ],
         "title": "GenerationMetricsRequest",
+        "type": "object"
+      },
+      "GnnExplainRequest": {
+        "description": "POST /api/v1/dl/gnn-explain \u2014 DL-2's edge-attribution body.",
+        "properties": {
+          "graphs": {
+            "items": {
+              "$ref": "#/components/schemas/GnnGraphSpec"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Graphs",
+            "type": "array"
+          },
+          "iters": {
+            "anyOf": [
+              {
+                "maximum": 2000.0,
+                "minimum": 10.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iters"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Labels"
+          },
+          "method": {
+            "default": "gnnexplainer",
+            "enum": [
+              "gnnexplainer",
+              "pgexplainer",
+              "attention",
+              "subgraphx"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "seed": {
+            "default": 0,
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          },
+          "top_k": {
+            "default": 8,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "graphs"
+        ],
+        "title": "GnnExplainRequest",
         "type": "object"
       },
       "GnnGraphSpec": {
@@ -5851,6 +6034,47 @@
         "title": "TrainSplitSpec",
         "type": "object"
       },
+      "UnsupervisedPcaRequest": {
+        "description": "POST /api/v1/unsupervised/pca \u2014 the ML-4 PCA sibling.\n\nThe unique component name follows the family's anti-collision\nrule (the ADAnalyzeRequest precedent): routes/md.py carries its\nown ``PcaRequest`` for ``POST /api/v1/md/pca``, and FastAPI's\ncollision fallback picks the plain-name winner nondeterministically\n(hash-seed-dependent set iteration) \u2014 unique class names keep the\nexported contract byte-stable across processes.",
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_components": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "component count; omit to keep the engine's own cap min(10, n_samples, n_features)",
+            "title": "N Components"
+          },
+          "scale": {
+            "default": true,
+            "title": "Scale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "UnsupervisedPcaRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -6081,47 +6305,6 @@
           "text"
         ],
         "title": "XvgRequest",
-        "type": "object"
-      },
-      "pharmaml__api__routes__unsupervised__PcaRequest": {
-        "description": "POST /api/v1/unsupervised/pca \u2014 the ML-4 PCA sibling.",
-        "properties": {
-          "dataset_id": {
-            "title": "Dataset Id",
-            "type": "string"
-          },
-          "mode": {
-            "default": "job",
-            "enum": [
-              "job",
-              "sync"
-            ],
-            "title": "Mode",
-            "type": "string"
-          },
-          "n_components": {
-            "anyOf": [
-              {
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "component count; omit to keep the engine's own cap min(10, n_samples, n_features)",
-            "title": "N Components"
-          },
-          "scale": {
-            "default": true,
-            "title": "Scale",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "dataset_id"
-        ],
-        "title": "PcaRequest",
         "type": "object"
       }
     }
@@ -7893,6 +8076,50 @@
         ]
       }
     },
+    "/api/v1/dl/gnn-explain": {
+      "post": {
+        "description": "DL-2 \u2014 the graph models' edge attribution (sync by design).\n\nThe REAL `pharmaml.ml.gnnxai` engine over a session-trained GNN:\nthe chosen explainer's per-edge importance (aligned with each\ngraph's own `edge_index` columns), the fidelity_plus /\nfidelity_minus drops, the sparsity, and the deterministic\ncircular layout the frontend renders the sized-edge scatter\nover.  The explained subgraph never exceeds the full graph \u2014\n`top_edges` is a subset of the edge columns by construction.",
+        "operationId": "gnn_explain_api_v1_dl_gnn_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GnnExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Gnn Explain Api V1 Dl Gnn Explain Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Gnn Explain",
+        "tags": [
+          "dl"
+        ]
+      }
+    },
     "/api/v1/dl/gnn-predict": {
       "post": {
         "operationId": "gnn_predict_api_v1_dl_gnn_predict_post",
@@ -9616,6 +9843,50 @@
         "summary": "Xvg",
         "tags": [
           "md"
+        ]
+      }
+    },
+    "/api/v1/ml/drift": {
+      "post": {
+        "description": "ML-5 \u2014 the batch-level distribution-shift verdict (sync).\n\n``detect_drift`` over the stored frames: the reference (the\nmodel's own training dataset restricted to its feature\nvocabulary, or a registered dataset) vs the current registered\ndataset.  Per-feature PSI + KS, the credit-risk verdicts, the\ndrifted list worst-first \u2014 the engine's own exported constants\nride the payload so the GUI never re-encodes a threshold.",
+        "operationId": "drift_api_v1_ml_drift_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Drift Api V1 Ml Drift Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drift",
+        "tags": [
+          "ml"
         ]
       }
     },
@@ -11749,7 +12020,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/pharmaml__api__routes__unsupervised__PcaRequest"
+                "$ref": "#/components/schemas/UnsupervisedPcaRequest"
               }
             }
           },

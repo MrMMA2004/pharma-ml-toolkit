@@ -34,6 +34,18 @@ training backend (part10's queued row).
   artifacts (``plot_shap_importance`` / ``plot_shap_beeswarm``).
   Non-tree estimators are refused honestly with the typed error that
   names the permutation-importance sibling — never a silent fallback.
+* ``POST /api/v1/ml/drift`` — ML-5 (the roadmap's row 12): the batch-
+  level distribution-shift verdict
+  (:func:`pharmaml.ml.drift.detect_drift` — the same engine the
+  batch-training CLI treats as mandatory): a reference frame (a
+  session-trained model's own training dataset, or a registered
+  dataset) compared against a registered current dataset, per-feature
+  PSI + KS with the credit-risk verdicts (``< 0.1`` stable, ``0.1 -
+  0.2`` moderate, ``>= 0.2`` shifted — the engine's own exported
+  constants). Sync by design (histogram sketches, sub-second at
+  session sizes); a current frame sharing no numeric reference
+  features is the honest ``n_features: 0`` answer, never an error;
+  an empty comparison never fabricates a verdict.
 
 ``n_jobs`` passes through verbatim, including ``-1`` (all cores) —
 the Phase-Eight passthrough clause, previewed here — but the DEFAULT
@@ -67,6 +79,7 @@ from pharmaml.exceptions import (
 )
 from pharmaml.ml.autoencoder import TabularAutoencoder
 from pharmaml.ml.cnn import SequenceCNNClassifier, SequenceCNNRegressor
+from pharmaml.ml.drift import detect_drift
 from pharmaml.ml.explain import shap_summary
 from pharmaml.ml.gnn import GraphClassifier
 from pharmaml.ml.models import list_models, resolve_model_name
@@ -161,6 +174,28 @@ class ExplainRequest(BaseModel):
     max_rows: int = Field(default=200, ge=1, le=_MAX_EXPLAIN_ROWS)
     figure: bool = False
     mode: Literal["job", "sync"] = "sync"
+
+
+class DriftRequest(BaseModel):
+    """POST /api/v1/ml/drift — ML-5's distribution-shift body.
+
+    Exactly one reference source: the training dataset of a
+    session-trained model (``model_id`` — the re-scoring lane the
+    roadmap names) or a registered dataset (``dataset_id``).  The
+    current batch is always a registered dataset (``new_dataset_id``).
+    """
+
+    model_id: str | None = None
+    dataset_id: str | None = None
+    new_dataset_id: str
+    features: list[str] | None = Field(default=None, max_length=200)
+
+    def _exactly_one_reference(self) -> None:
+        if (self.model_id is None) == (self.dataset_id is None):
+            raise ValueError(
+                "give either model_id=... or dataset_id=... as the drift "
+                "reference, not both/neither"
+            )
 
 
 @router.get("/models")
@@ -1119,3 +1154,122 @@ def explain(req: ExplainRequest, request: Request) -> dict:
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}
+
+
+# ------------------------------------------------------------- drift (ML-5)
+
+
+def _feature_drift_row(feature: Any) -> dict[str, Any]:
+    """One per-feature drift row, JSON-safe, verdict verbatim."""
+    return {
+        "feature": feature.name,
+        "psi": float(feature.psi),
+        "ks_statistic": (
+            None if feature.ks_statistic is None else float(feature.ks_statistic)
+        ),
+        "ks_pvalue": (
+            None if feature.ks_pvalue is None else float(feature.ks_pvalue)
+        ),
+        "reference_mean": float(feature.reference_mean),
+        "current_mean": float(feature.current_mean),
+        "mean_direction": feature.mean_direction,
+        "verdict": feature.verdict,
+    }
+
+
+@router.post("/drift")
+def drift(req: DriftRequest, request: Request) -> dict:
+    """ML-5 — the batch-level distribution-shift verdict (sync).
+
+    ``detect_drift`` over the stored frames: the reference (the
+    model's own training dataset restricted to its feature
+    vocabulary, or a registered dataset) vs the current registered
+    dataset.  Per-feature PSI + KS, the credit-risk verdicts, the
+    drifted list worst-first — the engine's own exported constants
+    ride the payload so the GUI never re-encodes a threshold.
+    """
+    try:
+        req._exactly_one_reference()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    dataset_store = request.app.state.dataset_store
+    if req.model_id is not None:
+        model_record = request.app.state.model_store.get(req.model_id)
+        if model_record is None:
+            raise HTTPException(status_code=404, detail="Unknown model_id.")
+        reference_dataset_id = model_record.dataset_id
+        if reference_dataset_id is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "model " + req.model_id + " carries no training "
+                    "dataset_id (a persisted-bundle reload); pass "
+                    "dataset_id=... as the drift reference instead"
+                ),
+            )
+        reference_dataset = dataset_store.get(reference_dataset_id)
+        if reference_dataset is None:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "the model's training dataset " + reference_dataset_id
+                    + " is no longer registered in this session; "
+                    "re-upload it or pass dataset_id=... explicitly"
+                ),
+            )
+        reference = reference_dataset.X
+        # the model's own feature vocabulary, in its own order (the
+        # engine skips features the current frame lacks — the AD
+        # box's honesty, never a 422 over a missing column)
+        features: list[str] | None = (
+            list(model_record.features)
+            if req.features is None
+            else req.features
+        )
+        reference_label = {
+            "kind": "model",
+            "model_id": model_record.model_id,
+            "name": model_record.name,
+            "dataset_id": reference_dataset_id,
+        }
+    else:
+        reference_dataset = dataset_store.get(req.dataset_id or "")
+        if reference_dataset is None:
+            raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+        reference = reference_dataset.X
+        features = req.features
+        reference_label = {
+            "kind": "dataset",
+            "dataset_id": reference_dataset.dataset_id,
+            "name": reference_dataset.name,
+        }
+    current = dataset_store.get(req.new_dataset_id)
+    if current is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Unknown new_dataset_id.",
+        )
+    try:
+        report = detect_drift(reference, current.X, features=features)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "mode": "sync",
+        "reference": {
+            **reference_label,
+            "n_reference_rows": len(reference),
+        },
+        "current": {
+            "dataset_id": current.dataset_id,
+            "name": current.name,
+            "n_rows": int(report.n_rows),
+        },
+        "warn_psi": float(report.warn_psi),
+        "shift_psi": float(report.shift_psi),
+        "n_features": len(report.features),
+        "n_drifted": report.n_drifted,
+        "drift_share": float(report.drift_share),
+        "features": [_feature_drift_row(f) for f in report.features],
+        "drifted": [_feature_drift_row(f) for f in report.drifted],
+        "summary": str(report),
+    }

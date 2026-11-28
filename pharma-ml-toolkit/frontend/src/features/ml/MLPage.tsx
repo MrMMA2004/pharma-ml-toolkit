@@ -66,6 +66,7 @@ import {
   type ADAnalyzeResult,
   type ADFrameRow,
   type DomainBoxReport,
+  type DriftResult,
   type KnnDomainResult,
   type KnnMetric,
   type ConformalClassificationResult,
@@ -1002,6 +1003,19 @@ export function MLPage() {
   const [boxBusy, setBoxBusy] = useState(false);
   const [boxError, setBoxError] = useState<string | null>(null);
   const [boxResult, setBoxResult] = useState<DomainBoxReport | null>(null);
+
+  // stage 10f (ML-5): the data-drift lane — the batch-level AD
+  // companion ("has the whole distribution moved?", the engine's own
+  // framing): the training frame of a session-trained model (or a
+  // registered dataset) vs a registered current dataset, PSI + KS
+  // per feature with the credit-risk verdicts
+  const [driftRefKind, setDriftRefKind] = useState<"model" | "dataset">("model");
+  const [driftModelId, setDriftModelId] = useState("");
+  const [driftDatasetId, setDriftDatasetId] = useState("");
+  const [driftCurrentDatasetId, setDriftCurrentDatasetId] = useState("");
+  const [driftBusy, setDriftBusy] = useState(false);
+  const [driftError, setDriftError] = useState<string | null>(null);
+  const [driftResult, setDriftResult] = useState<DriftResult | null>(null);
 
   // stage 10c: the ADMET profile (part13 Phase 5 — the vendored
   // admet_ai registry + the per-molecule physchem panel, dataset-free)
@@ -2062,6 +2076,42 @@ export function MLPage() {
       setBoxBridgeBusy(false);
     }
   }, [boxBridgeDatasetId, boxMetadataText]);
+
+  // stage 10f (ML-5): score the drift — the pre-flight mirrors the
+  // route's own exactly-one-reference contract so a doomed request is
+  // refused here, honestly, and every backend 422 surfaces verbatim
+  // through describeError
+  const handleDrift = useCallback(async () => {
+    setDriftBusy(true);
+    setDriftError(null);
+    setDriftResult(null);
+    try {
+      if (driftCurrentDatasetId === "") {
+        throw new Error("select the current dataset (the new batch) first");
+      }
+      if (
+        driftRefKind === "model"
+          ? driftModelId === ""
+          : driftDatasetId === ""
+      ) {
+        throw new Error(
+          "give exactly one drift reference — a trained model or a " +
+            "registered dataset; the route's own contract refuses " +
+            "both/neither",
+        );
+      }
+      const response = await mlApi.drift({
+        modelId: driftRefKind === "model" ? driftModelId : null,
+        datasetId: driftRefKind === "dataset" ? driftDatasetId : null,
+        newDatasetId: driftCurrentDatasetId,
+      });
+      setDriftResult(response);
+    } catch (error) {
+      setDriftError(describeError(error));
+    } finally {
+      setDriftBusy(false);
+    }
+  }, [driftRefKind, driftModelId, driftDatasetId, driftCurrentDatasetId]);
 
   // stage 11: the semi-supervised train (classification-only gate)
   const isClassification = selected?.task === "classification";
@@ -4874,6 +4924,196 @@ export function MLPage() {
                       ) : null}
                     </div>
                   )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* ML-5: the data-drift lane — the batch-level AD companion
+                (score drift before you trust the metrics): the PSI +
+                KS table with the credit-risk verdicts, the drifted
+                rows highlighted, the engine's own thresholds riding the
+                payload (never re-encoded here) */}
+            <div className="mt-4 rounded-lg border border-[var(--color-border)] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-[var(--color-foreground)]">
+                  Data-drift check (PSI + KS)
+                </span>
+                <span className="rounded-md bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+                  score drift before you trust the metrics
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  the reference
+                  <select
+                    aria-label="the drift reference kind"
+                    value={driftRefKind}
+                    onChange={(event) =>
+                      setDriftRefKind(event.target.value as "model" | "dataset")
+                    }
+                    className="mt-1 block w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="model">a trained model&apos;s training dataset</option>
+                    <option value="dataset">a registered dataset</option>
+                  </select>
+                </label>
+                {driftRefKind === "model" ? (
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    the model
+                    <select
+                      aria-label="the drift reference model"
+                      value={driftModelId}
+                      onChange={(event) => setDriftModelId(event.target.value)}
+                      className="mt-1 block w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      <option value="">no model selected</option>
+                      {trainedModels.map((model) => (
+                        <option key={model.model_id} value={model.model_id}>
+                          {model.name} · {model.n_train_rows} rows
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    the dataset
+                    <select
+                      aria-label="the drift reference dataset"
+                      value={driftDatasetId}
+                      onChange={(event) => setDriftDatasetId(event.target.value)}
+                      className="mt-1 block w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      <option value="">no dataset selected</option>
+                      {datasets.map((entry) => (
+                        <option key={entry.dataset_id} value={entry.dataset_id}>
+                          {entry.name} · {entry.shape[0]} rows
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  the current batch (new dataset)
+                  <select
+                    aria-label="the drift current dataset"
+                    value={driftCurrentDatasetId}
+                    onChange={(event) => setDriftCurrentDatasetId(event.target.value)}
+                    className="mt-1 block w-56 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="">no dataset selected</option>
+                    {datasets.map((entry) => (
+                      <option key={entry.dataset_id} value={entry.dataset_id}>
+                        {entry.name} · {entry.shape[0]} rows
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={driftBusy}
+                  onClick={() => void handleDrift()}
+                >
+                  {driftBusy ? "Scoring…" : "Score the drift"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                POST /api/v1/ml/drift — the batch-level companion the
+                applicability box cannot answer (a thousand rows can each
+                sit inside the box while the distribution moves): per-feature
+                PSI over the reference&apos;s own decile bins + the two-sample
+                KS, the credit-risk verdicts (
+                {driftResult === null ? "PSI < 0.1 stable · 0.1–0.2 moderate · ≥ 0.2 shifted" : `PSI < ${formatValue(driftResult.warn_psi)} stable · ${formatValue(driftResult.warn_psi)}–${formatValue(driftResult.shift_psi)} moderate · ≥ ${formatValue(driftResult.shift_psi)} shifted`}
+                ), the drifted list worst-first.
+              </p>
+              {driftError !== null ? (
+                <div className="mt-3"><ErrorBanner message={driftError} /></div>
+              ) : null}
+              {driftResult !== null ? (
+                <div className="mt-3">
+                  <p className="text-xs text-[var(--color-foreground)]">
+                    {driftResult.n_drifted > 0 ? (
+                      <>
+                        <span className="font-semibold">
+                          {driftResult.n_drifted} of {driftResult.n_features}{" "}
+                          feature(s) shifted
+                        </span>{" "}
+                        (share {formatValue(driftResult.drift_share * 100)}%) —{" "}
+                      </>
+                    ) : driftResult.n_features === 0 ? (
+                      "no shared numeric features — "
+                    ) : (
+                      "no feature shifted — "
+                    )}
+                    {driftResult.summary.split("\n")[0]}
+                  </p>
+                  {driftResult.features.length > 0 ? (
+                    <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-[var(--color-muted)] text-left text-[var(--color-muted-foreground)]">
+                            <th className="px-2 py-1.5 font-medium">feature</th>
+                            <th className="px-2 py-1.5 font-medium">psi</th>
+                            <th className="px-2 py-1.5 font-medium">ks</th>
+                            <th className="px-2 py-1.5 font-medium">ks p</th>
+                            <th className="px-2 py-1.5 font-medium">ref mean</th>
+                            <th className="px-2 py-1.5 font-medium">cur mean</th>
+                            <th className="px-2 py-1.5 font-medium">direction</th>
+                            <th className="px-2 py-1.5 font-medium">verdict</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {driftResult.features.map((row) => (
+                            <tr
+                              key={row.feature}
+                              data-verdict={row.verdict}
+                              className={`border-t border-[var(--color-border)] ${
+                                row.verdict === "shifted"
+                                  ? "bg-[var(--color-destructive)]/15 font-medium text-[var(--color-foreground)]"
+                                  : row.verdict === "moderate"
+                                    ? "bg-[var(--color-muted)]/60"
+                                    : ""
+                              }`}
+                            >
+                              <td className="px-2 py-1.5">{row.feature}</td>
+                              <td className="px-2 py-1.5">{formatValue(row.psi)}</td>
+                              <td className="px-2 py-1.5">
+                                {row.ks_statistic === null
+                                  ? "—"
+                                  : formatValue(row.ks_statistic)}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {row.ks_pvalue === null
+                                  ? "—"
+                                  : formatValue(row.ks_pvalue)}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {formatValue(row.reference_mean)}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {formatValue(row.current_mean)}
+                              </td>
+                              <td className="px-2 py-1.5">{row.mean_direction}</td>
+                              <td className="px-2 py-1.5">{row.verdict}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                      the current frame shares no numeric feature with the
+                      reference — the honest empty answer, never a verdict
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    reference:{" "}
+                    {driftResult.reference.kind === "model"
+                      ? `model ${driftResult.reference.name} (${driftResult.reference.n_reference_rows} training rows)`
+                      : `dataset ${driftResult.reference.name} (${driftResult.reference.n_reference_rows} rows)`}{" "}
+                    · current: {driftResult.current.name} (
+                    {driftResult.current.n_rows} rows)
+                  </p>
                 </div>
               ) : null}
             </div>

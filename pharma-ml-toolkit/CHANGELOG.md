@@ -1,3 +1,92 @@
+## [1.2.255] — 2026-11-28 — round 383 (the 176th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — the fourth 3-item set, three rows one after another: ML-5 + DL-1 + DL-2, the set closed in one round; trace 1a22225de84673f5)
+
+- **ML-5 (the roadmap's row 12 — the drift lane)**: the batch-level
+  distribution-shift verdict, at last reachable from the GUI:
+  `POST /api/v1/ml/drift` over the REAL `detect_drift` engine (the
+  same statistics the batch-training CLI treats as mandatory — the
+  engine's own docstring names it the applicability box's batch-level
+  companion). The exactly-one-reference contract: `model_id` resolves
+  a session-trained model's OWN training dataset and restricts the
+  comparison to its feature vocabulary; `dataset_id` takes a
+  registered frame directly; both/neither is the route's own 422,
+  mirrored as the client's pre-flight refusal. The answer carries the
+  per-feature PSI + KS table with the credit-risk verdicts, the
+  drifted list worst-first, and the engine's OWN exported constants
+  (0.1/0.2) riding the payload — never re-encoded in the route or
+  the GUI. The honest edges kept: a current frame sharing no numeric
+  reference feature is the `n_features: 0` answer with its own
+  summary, never an error or a fabricated verdict; unknown ids are
+  404s; the model's evicted training dataset names the re-upload
+  path. The ML page's stage-10f card ("score drift before you trust
+  the metrics") renders beside the kNN/box sub-lanes with the
+  model/dataset reference selects and the PSI table whose drifted
+  rows carry the highlight class + the data-verdict attribute. 6 API
+  tests + 5 page vitests + 7 client-pair vitests + the 7-clause drift
+  guard `tests/test_frontend_ml_drift.py` (the 0.1/0.2 constants
+  pinned) + the consumption pin extended in
+  `tests/test_ml_workspace.py`.
+
+- **DL-1 (the roadmap's row 13 — the hyperparameter search lane)**:
+  `POST /api/v1/dl/train` with `tune: true` — the SAME route, a
+  bounded per-key search block over the SAME constructor vocabulary
+  (choices, or low/high with the int/float inference and the optional
+  log lane), the search validated UP FRONT (a doomed search is a
+  422, never an asynchronous job failure). The trials run through
+  the REAL in-house `HPOStudy` (the same TPE/Random engine the
+  classical ML lane rides, no optuna): each candidate built and fit
+  on a seeded train side, scored on the held-out val side
+  (accuracy/R², negated — the optuna rule); cancellation lands
+  BETWEEN trials (the population-route precedent, CANCELLED not
+  FAILED); the winner refits on the full data with the full
+  per-epoch telemetry and registers like any trained model. The
+  report mirrors the ML lane's TuneReport surface plus the honest
+  extras — the refit's comparable score on the SAME carve and the
+  searched block echoed. The DL page's stage-7b panel (the arming
+  checkbox + the search-block textarea + the n_trials/sampler/seed
+  controls, the trial table whose best row — the study's argmin
+  computed from the payload's own values — carries the highlight +
+  the data-best attribute). 6 API tests (the refit-vs-baseline
+  acceptance on a seeded fixture + the between-trials cancellation)
+  + 4 page vitests + 6 client-pair vitests + the 6-clause drift guard
+  `tests/test_frontend_dl_tune.py`.
+
+- **DL-2 (the roadmap's row 14 — the GNN explainability lane)**:
+  `POST /api/v1/dl/gnn-explain` over the REAL `gnnxai` engine — the
+  graph models' edge attribution at last reachable: the four
+  explainers served (the learned `GNNExplainer` mask, the parametric
+  `PGExplainer` — its scorer trained over the request's OWN labeled
+  graphs, the `AttentionExplainer` coefficients — refused honestly
+  on non-GAT models with the engine's own verbatim message, and
+  `SubgraphX` with its own sampling scales). Every per-graph row
+  carries the per-edge scores ALIGNED with the graph's own
+  edge_index columns (re-served so the frontend never re-derives
+  geometry), the fidelity_plus/fidelity_minus drops, the sparsity,
+  and the deterministic CIRCULAR node layout the backend computes
+  (dependency-free — the same graph always drawing the same way);
+  the explained subgraph never exceeds the full graph (top_edges is
+  a sorted subset by construction). The GNN lane's edge-attribution
+  card renders the per-graph edge-importance table with the top rows
+  highlighted + the PlotlyFigure sized-edge scatter over the
+  backend's own layout (the null-separated edge segments + the
+  score-scaled midpoints + the node markers). 5 API tests + 3 page
+  vitests + 6 client-pair vitests + the 7-clause drift guard
+  `tests/test_frontend_dl_gnn_explain.py`.
+
+- **The anti-collision fix that rode along**: the fresh contract
+  export flipped the `PcaRequest` plain-name winner
+  nondeterministically (the hash-seed collision the ADAnalyzeRequest
+  comment warned about — routes/md.py and routes/unsupervised.py both
+  carried a `PcaRequest`): the ML-4 model renamed
+  `UnsupervisedPcaRequest` so md's owns the plain name
+  deterministically (the family's own anti-collision rule applied).
+  The contract re-exported 148 paths / 103 schemas with all four
+  count pins trued + the types regenerated.
+
+- Gates: vitest 475/475 over 61 files, tsc 0, ruff whole-tree green
+  (after the rollback's exec-bit sweep over 88 shebangless files —
+  the r185 class again), mypy clean (315 files), the drift suite +
+  the four contract pins + the consumption pins green.
+
 ## [1.2.254] — 2026-11-28 — round 382 (the 175th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — the third 3-item set, three rows one after another: VIZ-1 + ML-2 + ML-4, the set closed in one round; trace 1a221c83d00b5cfd)
 
 - **VIZ-1 (the roadmap's row 9 — the Visualization stat family's

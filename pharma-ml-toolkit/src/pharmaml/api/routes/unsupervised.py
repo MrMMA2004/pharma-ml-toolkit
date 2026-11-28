@@ -115,8 +115,16 @@ class AnomalyRequest(BaseModel):
     mode: Literal["job", "sync"] = "job"
 
 
-class PcaRequest(BaseModel):
-    """POST /api/v1/unsupervised/pca — the ML-4 PCA sibling."""
+class UnsupervisedPcaRequest(BaseModel):
+    """POST /api/v1/unsupervised/pca — the ML-4 PCA sibling.
+
+    The unique component name follows the family's anti-collision
+    rule (the ADAnalyzeRequest precedent): routes/md.py carries its
+    own ``PcaRequest`` for ``POST /api/v1/md/pca``, and FastAPI's
+    collision fallback picks the plain-name winner nondeterministically
+    (hash-seed-dependent set iteration) — unique class names keep the
+    exported contract byte-stable across processes.
+    """
 
     dataset_id: str
     n_components: int | None = Field(
@@ -562,7 +570,7 @@ def _pca_body(
 
 
 @router.post("/pca")
-def pca(req: PcaRequest, request: Request) -> dict:
+def pca(req: UnsupervisedPcaRequest, request: Request) -> dict:
     """ML-4's PCA sibling — the first plot every chemist asks for on a
     descriptor matrix, served over the real ``pca_reduce`` engine."""
     dataset = _resolve_dataset(request, req.dataset_id)

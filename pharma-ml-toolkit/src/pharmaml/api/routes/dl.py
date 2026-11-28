@@ -14,6 +14,24 @@ REAL torch backend (part10's queued row).
   the session bus — in job mode the job record's progress tracks the
   epoch counter too.  This is the §9.3 training-progress vocabulary
   running on REAL telemetry, not a stub.
+* ``POST /api/v1/dl/train`` with ``tune: true`` — DL-1 (the roadmap's
+  row 13): the search lane over the SAME route.  A bounded per-key
+  search block (``choices``, or ``low``/``high`` — int specs when
+  both bounds are ints, float otherwise with optional ``log``
+  sampling) over the SAME constructor vocabulary the route validates;
+  the trials run through the in-house TPE/Random engine
+  (:class:`pharmaml.ml.hpo.HPOStudy` — the same engine the classical
+  ML lane's ``tune`` flag rides): each candidate is built and fit on
+  a seeded train side and scored on the held-out val side (the
+  sklearn mixin semantics — accuracy / R², negated inside the study,
+  the optuna rule).  Cancellation lands BETWEEN trials (the
+  population-route precedent); the winner is refit on the full data
+  with the full per-epoch telemetry and registers like any trained
+  model — one prediction path for every trainer, never two.  The
+  report mirrors the ML lane's TuneReport surface (the trial table +
+  the best configuration + the best score) plus the honest extras:
+  the refit's comparable score on the SAME carve, and the searched
+  block echoed.
 
 Predictions for a DL-trained model flow through
 ``POST /api/v1/ml/predict`` — the model registers in the same
@@ -39,13 +57,29 @@ The GNN/MPNN lane (part13 Phase 5's first item — the API leg):
   graph rows from a session-trained GNN.  ``POST /api/v1/ml/predict``
   refuses graph models up front with the pointer here — one path
   per model class, never a tabular predict over graph weights.
+* ``POST /api/v1/dl/gnn-explain`` — DL-2 (the roadmap's row 14): the
+  graph models' explainability lane over the REAL
+  ``pharmaml.ml.gnnxai`` engine: the per-edge importance table for
+  inline graph rows through the chosen explainer (the learned mask
+  of ``GNNExplainer``, the Shapley-guided ``SubgraphX``, the GAT
+  attention coefficients, or the parametric ``PGExplainer`` — the
+  one that trains its scorer over the request's own labeled graphs),
+  each row carrying the fidelity_plus / fidelity_minus / sparsity
+  verdicts and the deterministic circular node layout the backend
+  computes for the sized-edge scatter.  A non-graph model is refused
+  up front; the attention lane refuses non-GAT models with the
+  engine's own message.  Sync by design (masked forward passes,
+  seconds per explained graph).
 """
 
 from __future__ import annotations
 
 import inspect
+import math
 import time
 import uuid
+from collections.abc import Callable
+from functools import partial
 from typing import Any, Literal
 
 import numpy as np
@@ -63,8 +97,26 @@ from pharmaml.ml.gnn import (
     CONV_NAMES,
     POOL_NAMES,
     Data,
+    GnnError,
     GraphClassifier,
     synthetic_motif_graphs,
+)
+from pharmaml.ml.gnnxai import (
+    AttentionExplainer,
+    EdgeExplanation,
+    GNNExplainer,
+    PGExplainer,
+    SubgraphX,
+    fidelity_minus,
+    fidelity_plus,
+    sparsity,
+)
+from pharmaml.ml.hpo import (
+    CategoricalParam,
+    FloatParam,
+    HPOStudy,
+    IntParam,
+    SearchSpace,
 )
 from pharmaml.ml.neural import (
     DeepMLPClassifier,
@@ -137,6 +189,16 @@ class DLTrainRequest(BaseModel):
         "tabular_transformer_regressor",
     ]
     hyperparams: dict[str, Any] | None = None
+    # DL-1 (the roadmap's row 13) — the search lane: `tune: true`
+    # rides the same route with a bounded per-key search space over
+    # the SAME constructor vocabulary (choices, or low/high — int
+    # specs when both bounds are ints, float otherwise with optional
+    # log sampling), through the in-house TPE/Hyperband engine
+    tune: bool = False
+    search: dict[str, dict[str, Any]] | None = None
+    n_trials: int = Field(default=12, ge=1, le=50)
+    sampler: Literal["tpe", "random"] = "tpe"
+    seed: int = Field(default=0, ge=0, le=2**31 - 1)
     mode: Literal["job", "sync"] = "job"
 
 
@@ -192,6 +254,122 @@ def _resolve_hyperparams(
             )
         params[key] = value
     return params
+
+
+def _accepted_keys(network_name: str) -> set[str]:
+    """The live constructor vocabulary of one network."""
+    cls, _task = _NETWORKS[network_name]
+    return {
+        name for name in inspect.signature(cls).parameters
+        if name != "self"
+    }
+
+
+def _build_search_space(
+    search: dict[str, dict[str, Any]] | None, network_name: str
+) -> SearchSpace:
+    """DL-1 — validate the per-key search block and build the space.
+
+    Every key must live in the network's own constructor vocabulary
+    (the same rule `_resolve_hyperparams` enforces); each entry is a
+    ``choices`` list (categorical — the only lane for list-valued
+    keys like ``hidden_layers``) or a ``low``/``high`` pair (ints
+    when both bounds are ints, floats otherwise, ``log`` optional on
+    the float lane).  Everything else is a 422 — a doomed search is
+    a client error, never an asynchronous job failure.
+    """
+    if not search:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "the tune lane needs a search block: {key: {choices: [...]} "
+                "or {key: {low: ..., high: ..., log: bool}}} over the "
+                f"network {network_name!r} constructor vocabulary"
+            ),
+        )
+    accepted = _accepted_keys(network_name)
+    space = SearchSpace()
+    for key, spec in search.items():
+        if key not in accepted:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"unknown search key {key!r}; network {network_name!r} "
+                    f"accepts {sorted(accepted)}"
+                ),
+            )
+        if not isinstance(spec, dict) or not spec:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"the search entry for {key!r} must be an object with "
+                    "either choices: [...] or low/high bounds"
+                ),
+            )
+        if "choices" in spec:
+            choices = spec["choices"]
+            if (
+                not isinstance(choices, list)
+                or len(choices) == 0
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"the search entry for {key!r} carries an empty "
+                        "or non-list choices block"
+                    ),
+                )
+            space.add(CategoricalParam(name=key, choices=tuple(choices)))
+        elif "low" in spec and "high" in spec:
+            low, high = spec["low"], spec["high"]
+            for bound in (low, high):
+                if isinstance(bound, bool) or not isinstance(bound, (int, float)):
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            f"the search bounds for {key!r} must be numbers "
+                            f"(got {bound!r})"
+                        ),
+                    )
+            if not float(low) < float(high):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"the search bounds for {key!r} must satisfy "
+                        f"low < high (got {low!r} .. {high!r})"
+                    ),
+                )
+            log = spec.get("log", False)
+            if not isinstance(log, bool):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(f"the search log flag for {key!r} must be a boolean"),
+                )
+            if isinstance(low, int) and isinstance(high, int):
+                space.add(IntParam(name=key, low=low, high=high))
+            else:
+                if float(low) <= 0.0 and log:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=(
+                            f"a log search for {key!r} needs a positive "
+                            f"low bound (got {low!r})"
+                        ),
+                    )
+                space.add(
+                    FloatParam(
+                        name=key, low=float(low), high=float(high), log=log
+                    )
+                )
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"the search entry for {key!r} carries neither choices "
+                    "nor low/high bounds"
+                ),
+            )
+    return space
 
 
 @router.get("/networks")
@@ -319,9 +497,66 @@ def train(req: DLTrainRequest, request: Request) -> dict:
     # validate hyperparameters up front (both modes): a bad key is a
     # client error, not an asynchronous job failure
     _resolve_hyperparams(req.hyperparams, req.network)
+    # DL-1: validate the search block up front too (a doomed search is
+    # a client error, never an asynchronous job failure), and gate the
+    # lane's own data minimum (the objective's carve needs both sides)
+    space = None
+    if req.tune:
+        space = _build_search_space(req.search, req.network)
+        if len(dataset.X) < 12:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "the tune lane carves a validation side for the "
+                    "objective; the dataset carries "
+                    f"{len(dataset.X)} rows and the route's own minimum is 12"
+                ),
+            )
     manager = request.app.state.job_manager
     model_store = request.app.state.model_store
     bus = request.app.state.bus
+    if req.tune:
+        if req.mode == "sync":
+            assert space is not None  # built in the guard above
+            return {
+                "mode": "sync",
+                **_dl_tune_body(
+                    req.dataset_id, dataset.X, dataset.y, dataset.target,
+                    req.network, req.hyperparams, space,
+                    req.n_trials, req.sampler, req.seed,
+                    model_store, search_echo=req.search, bus=bus,
+                ),
+            }
+        record = manager.submit(
+            "dl.train",
+            "deep-learning",
+            _dl_tune_body,
+            configuration={
+                "dataset_id": req.dataset_id,
+                "network": req.network,
+                "hyperparams": req.hyperparams or {},
+                "tune": True,
+                "search": req.search or {},
+                "n_trials": req.n_trials,
+                "sampler": req.sampler,
+                "seed": req.seed,
+            },
+            dataset_id=req.dataset_id,
+            dataset_X=dataset.X,
+            dataset_y=dataset.y,
+            target=dataset.target,
+            network_name=req.network,
+            hyperparams=req.hyperparams,
+            space=space,
+            n_trials=req.n_trials,
+            sampler=req.sampler,
+            seed=req.seed,
+            model_store=model_store,
+            search_echo=req.search,
+            bus=bus,
+            manager=manager,
+        )
+        return {"mode": "job", "job": record.public()}
     if req.mode == "sync":
         return {
             "mode": "sync",
@@ -351,6 +586,164 @@ def train(req: DLTrainRequest, request: Request) -> dict:
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}
+
+
+# -- DL-1: the search lane body (the roadmap's row 13) ---------------------
+
+_MIN_TUNE_ROWS = 12
+
+
+def _dl_tune_body(
+    dataset_id: str,
+    dataset_X,
+    dataset_y,
+    target: str,
+    network_name: str,
+    hyperparams: dict[str, Any] | None,
+    space: SearchSpace,
+    n_trials: int,
+    sampler: str,
+    seed: int,
+    model_store,
+    search_echo: dict[str, dict[str, Any]] | None = None,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """DL-1 — the search body: trials through the REAL TPE engine.
+
+    The objective is the honest one the roadmap names: each candidate
+    configuration is BUILT and FIT on a seeded train side of the
+    dataset, then scored on the held-out val side (accuracy for the
+    classifiers, R² for the regressors — the sklearn mixin score,
+    the same semantics the ML lane's TuneReport carries), negated so
+    smaller-is-better inside the study (the optuna rule the engine
+    documents).  Cancellation lands between trials (the
+    population-route precedent); the winner is refit on the FULL data
+    through the same `_train_body` fit path and registers like any
+    trained model — one prediction path for every trainer, never two.
+    """
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the search stage.")
+    cls, task = _NETWORKS[network_name]
+    base = _resolve_hyperparams(hyperparams, network_name)
+
+    # the seeded objective carve (train on one side, score on the other)
+    rng = np.random.default_rng(seed)
+    n = len(dataset_X)
+    if n < _MIN_TUNE_ROWS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the tune lane needs >= {_MIN_TUNE_ROWS} rows for its "
+                f"objective carve; the dataset carries {n}"
+            ),
+        )
+    perm = rng.permutation(n)
+    val_n = max(2, round(0.2 * n))
+    val_idx = perm[:val_n]
+    train_idx = perm[val_n:]
+    X_train = dataset_X.iloc[train_idx]
+    y_train = dataset_y.iloc[train_idx]
+    X_val = dataset_X.iloc[val_idx]
+    y_val = dataset_y.iloc[val_idx]
+
+    def objective(params) -> float:
+        estimator = cls(**{**base, **dict(params)})
+        estimator.fit(X_train, y_train)
+        return -float(estimator.score(X_val, y_val))
+
+    study = HPOStudy(
+        objective=objective, space=space, sampler=sampler, seed=seed
+    )
+    completed = 0
+    for _ in range(n_trials):
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledJob(
+                f"Cancelled between trials (after {completed} of {n_trials})"
+            )
+        study.run(1)
+        completed += 1
+        if manager is not None and job_id is not None:
+            manager.report_progress(
+                job_id,
+                min(90, int(100.0 * completed / n_trials)),
+                f"trial {completed}/{n_trials}",
+                event=EventType.TRAINING_PROGRESS,
+            )
+    if not study.trials:
+        raise HTTPException(  # pragma: no cover - n_trials >= 1 always
+            status_code=500,
+            detail="the search produced no trials",
+        )
+    best = study.best()
+    if best.value is None:  # pragma: no cover - objective always returns
+        raise HTTPException(
+            status_code=500,
+            detail="the search produced no completed trial",
+        )
+    best_params = {**base, **dict(best.params)}
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 95, "refitting the best configuration on the full data"
+        )
+
+    # the winner refit on the FULL data — the same fit + telemetry path
+    # the fixed-config lane rides (per-epoch events included)
+    estimator = cls(**best_params)
+    on_epoch = _training_progress_hook(bus, manager, job_id)
+    started = time.monotonic()
+    estimator.fit(dataset_X, dataset_y, on_epoch=on_epoch)
+    fit_seconds = time.perf_counter() - started
+    record = TrainedModelRecord(
+        model_id=f"mdl-{uuid.uuid4().hex[:12]}",
+        model=estimator,
+        name=network_name,
+        task=task,
+        dataset_id=dataset_id,
+        target=target,
+        features=[str(c) for c in dataset_X.columns],
+        n_train_rows=len(dataset_X),
+        best_params={"network": network_name, **best_params},
+        cv_scores=None,  # no CV in this path — honest, not faked
+        cv_mean=None,
+        cv_std=None,
+        fit_seconds=fit_seconds,
+    )
+    model_store.register(record)
+    view = record.view()
+    view["engine"] = "torch"
+    view["predict_url"] = "/api/v1/ml/predict"
+
+    # the refit's comparable score on the SAME carve — the acceptance
+    # clause the roadmap names (the refit metric vs the fixed-config
+    # baseline, one scale, never a second evaluation authority)
+    refit_score = float(estimator.score(X_val, y_val))
+    return {
+        "model": view,
+        "tune": {
+            "best_params": dict(best.params),
+            "best_score": -float(best.value),
+            "n_trials": completed,
+            "task": task,
+            "trials": [
+                {
+                    "number": t.number,
+                    "params": dict(t.params),
+                    "value": t.value,
+                }
+                for t in study.trials
+            ],
+            "refit_score": refit_score,
+            "sampler": sampler,
+            "seed": seed,
+            "searched": {
+                name: dict(spec)
+                for name, spec in (search_echo or {}).items()
+            },
+        },
+    }
 
 
 # -- the GNN/MPNN lane (part13 Phase 5, the API leg) -----------------------
@@ -978,5 +1371,208 @@ def autoencoder_encode(req: AutoencoderEncodeRequest, request: Request) -> dict:
         "note": (
             "reconstruction error is a heuristic outlier ranking — not "
             "ground truth (the dedicated anomaly lane owns Isolation Forest)"
+        ),
+    }
+
+
+# -- DL-2: the GNN explainability lane (the roadmap's row 14) -------------
+
+
+def _circular_layout(n_nodes: int) -> list[list[float]]:
+    """The deterministic node positions for the sized-edge scatter.
+
+    One node per angle on the unit circle — dependency-free and stable
+    (the same graph always draws the same way; no spring iterations,
+    no networkx, nothing random).
+    """
+    if n_nodes <= 0:
+        return []
+    if n_nodes == 1:
+        return [[0.0, 0.0]]
+    return [
+        [
+            round(math.cos(2.0 * math.pi * i / n_nodes), 6),
+            round(math.sin(2.0 * math.pi * i / n_nodes), 6),
+        ]
+        for i in range(n_nodes)
+    ]
+
+
+class GnnExplainRequest(BaseModel):
+    """POST /api/v1/dl/gnn-explain — DL-2's edge-attribution body."""
+
+    model_id: str
+    # the honest sync bound: masked forward passes are seconds per
+    # explained graph — 20 keeps the worst request in the tens of
+    # seconds, never the minutes a job would deserve
+    graphs: list[GnnGraphSpec] = Field(min_length=1, max_length=20)
+    # one label per graph — the PGExplainer's OWN training signal (its
+    # scorer fits over the request's graphs); unused by the other
+    # three methods (a label with them is a 422, never a silent skip)
+    labels: list[int] | None = Field(default=None, min_length=1, max_length=20)
+    method: Literal[
+        "gnnexplainer", "pgexplainer", "attention", "subgraphx"
+    ] = "gnnexplainer"
+    top_k: int = Field(default=8, ge=1, le=100)
+    # the class to explain (stamped onto every graph's y so every
+    # explainer and both fidelity passes agree on ONE target); null =
+    # the model's own argmax prediction per graph
+    target: int | None = None
+    seed: int = Field(default=0, ge=0, le=2**31 - 1)
+    # the optimizer iters knob (gnnexplainer/pgexplainer only — the
+    # teaching default 200/150 lands when null; subgraphx/attention
+    # carry their own sampling scales)
+    iters: int | None = Field(default=None, ge=10, le=2000)
+
+
+@router.post("/gnn-explain")
+def gnn_explain(req: GnnExplainRequest, request: Request) -> dict:
+    """DL-2 — the graph models' edge attribution (sync by design).
+
+    The REAL `pharmaml.ml.gnnxai` engine over a session-trained GNN:
+    the chosen explainer's per-edge importance (aligned with each
+    graph's own `edge_index` columns), the fidelity_plus /
+    fidelity_minus drops, the sparsity, and the deterministic
+    circular layout the frontend renders the sized-edge scatter
+    over.  The explained subgraph never exceeds the full graph —
+    `top_edges` is a subset of the edge columns by construction.
+    """
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    model = model_record.model
+    if not isinstance(model, GraphClassifier):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is not a graph model; the "
+                "explainability lane needs one trained through "
+                "POST /api/v1/dl/gnn-train"
+            ),
+        )
+    if req.labels is not None and req.method != "pgexplainer":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "labels ride the pgexplainer lane only (its scorer "
+                "trains over the request's own labeled graphs); the "
+                f"{req.method!r} explainer takes graphs alone"
+            ),
+        )
+    if req.method == "pgexplainer" and req.labels is None:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "the pgexplainer lane needs labels: one per graph (its "
+                "parametric scorer trains over the request's own graphs)"
+            ),
+        )
+    if (
+        req.labels is not None
+        and len(req.labels) != len(req.graphs)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"labels carries {len(req.labels)} entries for "
+                f"{len(req.graphs)} graphs — exactly one per graph"
+            ),
+        )
+    if req.iters is not None and req.method not in (
+        "gnnexplainer",
+        "pgexplainer",
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the iters knob rides the optimizer explainers only "
+                f"(gnnexplainer/pgexplainer); {req.method!r} carries its "
+                "own sampling scales"
+            ),
+        )
+    # the graphs (and the target stamp so every explainer + both
+    # fidelity passes agree on ONE target class)
+    datas: list[Data] = [spec.to_data() for spec in req.graphs]
+    if req.target is not None:
+        for data in datas:
+            data.y = np.asarray(req.target, dtype=int)
+    elif req.method == "pgexplainer":
+        # the PG scorer's own training targets: the per-graph labels
+        for data, label in zip(datas, req.labels or [], strict=False):
+            data.y = np.asarray(int(label), dtype=int)
+
+    explainer: GNNExplainer | PGExplainer | AttentionExplainer | SubgraphX
+    # the per-method callable: SubgraphX's explain carries no top_k
+    # (its own sampling scales) — the other three do
+    explain_fn: Callable[[GraphClassifier, Data], EdgeExplanation]
+    if req.method == "gnnexplainer":
+        explainer = GNNExplainer(
+            iters=(req.iters if req.iters is not None else 200),
+            seed=req.seed,
+        )
+        explain_fn = partial(explainer.explain, top_k=req.top_k)
+    elif req.method == "subgraphx":
+        explainer = SubgraphX(seed=req.seed)
+        explain_fn = explainer.explain
+    elif req.method == "attention":
+        explainer = AttentionExplainer()
+        explain_fn = partial(explainer.explain, top_k=req.top_k)
+    else:
+        explainer = PGExplainer(
+            iters=(req.iters if req.iters is not None else 150),
+            seed=req.seed,
+        )
+        try:
+            explainer.fit(model, datas, np.asarray(req.labels or [], dtype=int))
+        except GnnError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        explain_fn = partial(explainer.explain, top_k=req.top_k)
+
+    rows: list[dict[str, Any]] = []
+    for index, data in enumerate(datas):
+        try:
+            explanation = explain_fn(model, data)
+            fid_plus = fidelity_plus(model, data, explanation)
+            fid_minus = fidelity_minus(model, data, explanation)
+            spar = sparsity(explanation)
+        except GnnError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        n_nodes = int(np.asarray(data.x).shape[0])
+        rows.append(
+            {
+                "index": index,
+                "n_nodes": n_nodes,
+                "n_edges": int(explanation.scores.size),
+                "target_class": int(explanation.target_class),
+                "method": explanation.method,
+                "scores": [float(s) for s in explanation.scores],
+                "top_edges": [int(e) for e in explanation.top_edges],
+                "fidelity_plus": float(fid_plus),
+                "fidelity_minus": float(fid_minus),
+                "sparsity": float(spar),
+                "extra": json_safe(explanation.extra),
+                "edge_index": [
+                    [int(data.edge_index[0, c]), int(data.edge_index[1, c])]
+                    for c in range(data.edge_index.shape[1])
+                ],
+                "layout": {
+                    "kind": "circular",
+                    "nodes": _circular_layout(n_nodes),
+                },
+            }
+        )
+    return {
+        "mode": "sync",
+        "model_id": req.model_id,
+        "method": req.method,
+        "top_k": req.top_k,
+        "seed": req.seed,
+        "graphs": rows,
+        "note": (
+            "the per-edge scores are aligned with each graph's own "
+            "edge_index columns; fidelity_plus is the drop when the top "
+            "edges are removed, fidelity_minus the drop when only they "
+            "remain; the layout is the deterministic circular node "
+            "position (the sized-edge scatter's canvas)"
         ),
     }

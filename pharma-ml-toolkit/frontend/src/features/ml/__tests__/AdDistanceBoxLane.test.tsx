@@ -410,10 +410,16 @@ describe("MLPage stage 10 — the ML-2 sub-lanes (the distance-only kNN + the do
 
     render(<MLPage />);
 
+    // scope to the box-bridge select's own options — stage 10 now
+    // carries the ML-5 drift lane's dataset selects beside it (the
+    // same option text renders in each)
+    const boxBridgeSelect = await screen.findByLabelText(
+      "the box-bridge dataset",
+    );
     await waitFor(() => {
       expect(
-        screen.getByRole("option", { name: /solubility-box\.csv · 3 rows/ }),
-      ).toBeInTheDocument();
+        boxBridgeSelect.querySelector('option[value="ds-box"]'),
+      ).not.toBeNull();
     });
     await userEvent.selectOptions(
       screen.getByLabelText("the box-bridge dataset"),

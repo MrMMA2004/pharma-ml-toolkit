@@ -84,7 +84,14 @@
     VIZ-1 drift-guard tests + the 9 ML-2 drift-guard tests + the
     9 ML-4 drift-guard tests + the 11 ML-4 API tests in
     tests/api/test_unsupervised_reinforce.py). */
-export const SHIPPED_TEST_COUNT = 8438;
+/*  r383 re-true (the v1.2.255 fourth-set ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,474
+    collected / 0 errors over 457 files (the +36 over the r382
+    pin: the fourth set's rows -- the 6 ML-5 API tests + the 7
+    ML-5 drift-guard tests + the 6 DL-1 API tests + the 6 DL-1
+    drift-guard tests + the 5 DL-2 API tests + the 7 DL-2
+    drift-guard tests + the r383-borne consumption pin edits). */
+export const SHIPPED_TEST_COUNT = 8474;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -162,7 +169,15 @@ export const SHIPPED_TEST_COUNT = 8438;
     vitest lanes -- the 6-test VIZ-1 column-bridge page suite + the
     12-test ML-2 pair (the 6 client-op tests + the 6 AD sub-lane
     page tests) + the 7-test ML-4 unsupervised-methods lane). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 444;
+/*  r383 re-true (the v1.2.255 fourth-set ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 475/475 over 61
+    files (the +31/+6 over the r382 pin: the fourth set's rows --
+    the 12-test ML-5 pair (the 5 drift-lane page tests + the 7
+    client-parser tests) + the 10-test DL-1 pair (the 4 search-panel
+    page tests + the 6 client-parser tests) + the 9-test DL-2 pair
+    (the 3 edge-attribution page tests + the 6 client-parser
+    tests)). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 475;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -314,7 +329,19 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 444;
     byte-identical to the recorded pin; the byte delta is the zip
     churn -- four 253 homes out, four 254 homes in -- plus the
     notebook-output churn + the round's own lanes). */
-export const SHIPPED_FILE_COUNT = 1940;
+/*  r383 re-true (the v1.2.255 fourth-set ship, measurement-last): the
+    census re-walked on the FINAL fixed point -- 1,954 files /
+    1,017,905,081 B (the +13 files over the r382 pin 1,940: the
+    six new pytest batteries (the three API files + the three drift
+    guards) + the six new vitest pairs' files (the three page tests
+    + the three client pairs) + the two new in-tree 255-zip homes
+    (the toolkit's download/ + dist-archive/); the 254 predecessors
+    RETAINED this round -- the offsite wipe took their independent
+    backups, so the builder's retention rule honestly kept all four
+    254 homes, and the census counts them; the byte growth over
+    961,015,202 B is the retained-254 churn + the 255 zips + the
+    re-executed notebook outputs + the fourth set's own lanes). */
+export const SHIPPED_FILE_COUNT = 1954;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -535,7 +562,14 @@ export const SHIPPED_FILE_COUNT = 1940;
     like-for-like r381 reading is +2,732: the three roadmap rows'
     lanes + the contract re-export + the re-executed notebook
     outputs + the ledger carriers). */
-export const SHIPPED_SOURCE_LINES = 612419;
+/*  r383 re-true (the v1.2.255 fourth-set ship, measurement-last): the
+    census re-measured live on the FINAL fixed point under the
+    committed census_210/toolkit-fs countLines semantics -- 615,000
+    lines (the like-for-like +2,581 over the r382 pin 612,419:
+    the fourth set's three rows' lanes + the re-executed notebook
+    outputs + the retained 254/255 zip churn + the ledger
+    carriers). */
+export const SHIPPED_SOURCE_LINES = 615000;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

@@ -318,7 +318,7 @@ and the satellite routers is consumed — except two whole families below.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | ML-5 — `POST /api/v1/ml/drift` comparing a training sketch against new data |
-| Current status | Partial (engine + CLI Implemented; API route and UI Missing) |
+| Current status | **Implemented (round 383, v1.2.255)** — the `POST /api/v1/ml/drift` route over the real `detect_drift` engine served (the exactly-one-reference contract — a session-trained model's own training dataset via `model_id` or a registered dataset via `dataset_id` — against a registered current dataset; per-feature PSI + KS with the credit-risk verdicts, the engine's own exported constants riding the payload, the drifted list worst-first, the honest `n_features: 0` empty-overlap answer never an error); the ML Evaluate-adjacent stage-10f card renders the PSI table with the drifted rows highlighted and the model/dataset reference selects; pinned by `tests/api/test_ml_drift.py`, the vitest pair, and the drift guard `tests/test_frontend_ml_drift.py` (the 0.1/0.2 constants pinned) + the consumption pin extended in `tests/test_ml_workspace.py` |
 | Problem | `src/pharmaml/ml/drift.py` `detect_drift` (per-feature PSI + the training-sketch machinery, `tests/test_data_drift_diagnostic.py`, and the CLI `pharmaml ml drift` at `cli.py:417`) has no route — the batch-training CLI even wires `--no-drift-check` — but a GUI user re-scoring a deployed model on fresh data has no drift readout at all. |
 | Proposed solution | `POST /api/v1/ml/drift` taking `{model_id | dataset_id (reference), new_dataset_id}`; the body reuses the engine's per-feature sketches over the stored frames and returns the PSI table + the drifted-feature list; an ML Evaluate-stage card renders it ("score drift before you trust the metrics"). |
 | Scientific value | PSI drift is the standard first-line model-monitoring verdict for production QSAR — the toolkit's own CLI treats it as mandatory for batch scoring, the GUI should match. |
@@ -348,7 +348,7 @@ consumed. The efficiency and explainability engines below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DL-1 — A `tune` lane for `POST /api/v1/dl/train` riding `ml/hpo.py` |
-| Current status | Partial (HPO engine Implemented; DL train request has no search mode) |
+| Current status | **Implemented (round 383, v1.2.255)** — the `tune`/`search`/`n_trials`/`sampler`/`seed` fields ride `DLTrainRequest` (the search block validated up front against the SAME constructor vocabulary — a doomed search is a 422, never an asynchronous job failure); the search body runs the trials through the REAL in-house `HPOStudy` (TPE/Random — the same engine the classical ML lane rides): each candidate built and fit on a seeded train side, scored on the held-out val side (accuracy/R², negated — the optuna rule), cancellation BETWEEN trials (the population-route precedent), the winner refit on the full data with the full per-epoch telemetry and registered like any trained model; the report mirrors the ML lane's TuneReport surface + the refit's comparable score + the searched block echoed; the DL page's stage-7b search panel (the search-block textarea + the n_trials/sampler/seed controls, the trial table with the best row highlighted) — pinned by `tests/api/test_dl_tune.py` (7 API tests), the vitest pair, and the drift guard `tests/test_frontend_dl_tune.py` |
 | Problem | `routes/dl.py:129` `DLTrainRequest` takes a flat `hyperparams: dict` — one fixed configuration — while the classical ML lane's `tune` flag runs the in-tree TPE/Hyperband optimizer (`ml/hpo.py:646 tune_model`, `hpo_presets.py`, `tests/test_hpo_resumability.py`). The DL page's "Configure Training" stage (`DLPage.tsx:1689`) therefore edits single values by hand; there is no search over epochs/lr/dropout/hidden layers. |
 | Proposed solution | Add `tune: bool` + a bounded search-space block (per-key low/high or choices over the same `_HYPERPARAM_SPEC` vocabulary the route already validates) to `DLTrainRequest`; the job body samples through the existing TPE/Hyperband classes per candidate fit and reports the trial table + the best configuration, mirroring the ML lane's TuneReport surface. |
 | Scientific value | LR/dropout/depth dominate tabular-DL quality; a seeded TPE search beats hand-tuning on the same data in the same wall-clock budget. |
@@ -364,7 +364,7 @@ consumed. The efficiency and explainability engines below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DL-2 — `POST /api/v1/dl/gnn-explain` + an edge-attribution panel |
-| Current status | Partial (engine Implemented and tested; route Missing; UI Missing) |
+| Current status | **Implemented (round 383, v1.2.255)** — the `POST /api/v1/dl/gnn-explain` route over the REAL `gnnxai` engine served (the four explainers: the learned mask of `GNNExplainer`, the parametric `PGExplainer` — its scorer trained over the request's OWN labeled graphs, the `AttentionExplainer` coefficients — refused honestly on non-GAT models with the engine's own message, and `SubgraphX`; the per-edge scores aligned with each graph's own edge_index columns, the fidelity_plus/fidelity_minus/sparsity verdicts, the explained subgraph never exceeding the full graph, and the deterministic circular node layout the sized-edge scatter rides); the GNN lane's edge-attribution card (the method/top_k/seed/target/labels controls, the per-graph edge-importance table with the top rows highlighted, the PlotlyFigure sized-edge scatter over the backend's own layout) — pinned by `tests/api/test_dl_gnn_explain.py` (5 API tests), the vitest pair, and the drift guard `tests/test_frontend_dl_gnn_explain.py` |
 | Problem | `src/pharmaml/ml/gnnxai.py` ships `GNNExplainer`, `PGExplainer`, `AttentionExplainer`, `SubgraphX` and the fidelity/sparsity/accuracy-at-k metrics (`tests/test_gnn.py`); the DL GNN lane trains and predicts (`/dl/gnn-train|predict` consumed) but offers no explanation — a user cannot see which edges/atoms drove a graph prediction. |
 | Proposed solution | Add `/dl/gnn-explain` taking `{model_id, graphs, method, target}`; the body runs the chosen explainer and returns the per-edge importance + the fidelity metrics; the GNN lane's result card gains the edge-importance table and (PlotlyFigure) a sized-edge scatter over the graph's 2-D layout the backend computes. |
 | Scientific value | Atom/bond attribution is what makes a GNN verdict actionable for a medicinal chemist — the same role SHAP plays for the tabular models in stage 19. |
@@ -1179,6 +1179,117 @@ job mode) + 7 vitests (the six-chip mirror + the three round trips +
 the pca round trip + the degenerate honesty) + the 9-test drift
 guard `tests/test_frontend_unsupervised_methods.py`. The next row is
 ML-5 (the drift lane — the first row of the fourth set).
+
+— execution log: **row 12 (ML-5) executed in round 383 at v1.2.255** — the
+drift lane, the row that opens the fourth 3-item set: the
+`POST /api/v1/ml/drift` route over the REAL `detect_drift` engine
+(sync by design — the histogram sketches are sub-second at session
+sizes), the exactly-one-reference contract (`model_id` resolves the
+session-trained model's OWN training dataset and restricts the
+comparison to its feature vocabulary; `dataset_id` takes a registered
+frame directly; both/neither is the route's own 422, mirrored as the
+client's pre-flight refusal), the answer carrying the per-feature
+PSI + KS table with the credit-risk verdicts, the drifted list
+worst-first, and the engine's OWN exported constants (0.1/0.2) riding
+the payload — never re-encoded in the route or the GUI (the drift
+guard pins the constants); the honest edges kept: a current frame
+sharing no numeric reference feature is the `n_features: 0` answer
+with its own summary, never an error or a fabricated verdict, unknown
+ids are 404s, the model's evicted training dataset names the re-upload
+path. The stage-10f card ("score drift before you trust the metrics")
+renders beside the kNN/box sub-lanes with the model/dataset reference
+selects and the PSI table whose drifted rows carry the highlight class
++ the data-verdict attribute, the moderate rows their own milder
+class; 6 API tests (the shifted-flags/identical-does-not fail-first
+pair, the model reference lane, the both/neither 422, the three 404s,
+the honest zero overlap, the moderate band reachable) + 5 page
+vitests over the full page mount + 7 client-pair vitests + the
+7-clause drift guard `tests/test_frontend_ml_drift.py` + the
+consumption pin extended in `tests/test_ml_workspace.py`; the
+contract re-exported 147 paths / 102 schemas with all four count pins
+trued (the r379 lesson applied) + the types regenerated. The next row
+is DL-1 (the DL hyperparameter search — item 2 of the fourth set).
+
+— execution log: **row 13 (DL-1) executed in round 383 at v1.2.255** — the
+hyperparameter search lane, item 2 of the fourth set: the
+`tune`/`search`/`n_trials`/`sampler`/`seed` fields riding
+`DLTrainRequest` on the SAME `/dl/train` route (no new path — the
+fixed-config lane unchanged, byte-identical when `tune` is absent);
+the search block validated UP FRONT against the network's own live
+constructor vocabulary (`_build_search_space` — choices, or low/high
+with int/float inference and the optional log lane; an unknown key,
+inverted bounds, a non-list choices, a missing block, or the
+12-row carve minimum are all 422s before the submit, never an
+asynchronous job failure); the search body through the REAL
+in-house engine (`HPOStudy` — the same TPE/Random machinery the
+classical ML lane's tune flag rides, no optuna dependency): each
+candidate built and fit on a seeded train side of the dataset,
+scored on the held-out val side (the sklearn mixin semantics —
+accuracy / R², negated into the study's smaller-is-better
+convention), the trials run one `study.run(1)` at a time so
+cancellation lands BETWEEN trials (the population-route precedent,
+CANCELLED not FAILED); the winner refit on the FULL data through the
+same fit + per-epoch telemetry path and registered like any trained
+model (one prediction path for every trainer, never two); the report
+mirroring the ML lane's TuneReport surface (the trial table + the
+best configuration + the best score) plus the honest extras — the
+refit's comparable score on the SAME carve (the acceptance clause
+the roadmap names: the refit metric vs the fixed-config baseline,
+one scale, never a second evaluation authority) and the searched
+block echoed. The stage-7b search panel on the DL page (the arming
+checkbox + the search-block textarea + the n_trials/sampler/seed
+controls, the client pre-flight mirroring the route's own contract,
+the trial table whose best row — the study's argmin computed from
+the payload's own values, never a re-encoded best — carries the
+highlight + the data-best attribute, both columns shown: the honest
+bigger-is-better score AND the study's own objective); 6 API tests
+(the trial table + the best-among-the-candidates argmax clause + the
+refit-vs-baseline acceptance on a seeded fixture + the categorical
+list-valued lane + the five doomed-search 422s + the job mode + the
+between-trials cancellation) + 4 page vitests + 6 client-pair
+vitests + the 6-clause drift guard `tests/test_frontend_dl_tune.py`.
+The next row is DL-2 (the GNN explainability — item 3 of the fourth
+set, the row that closes it).
+
+— execution log: **row 14 (DL-2) executed in round 383 at v1.2.255** — the
+GNN explainability lane, the row that CLOSES the fourth 3-item set: the
+`POST /api/v1/dl/gnn-explain` route over the REAL `gnnxai` engine
+(sync by design — masked forward passes, seconds per explained graph,
+the graphs bounded at 20): the four explainers served — the learned
+mask of `GNNExplainer` (the iters/lr knobs riding the request's own
+seed), the parametric `PGExplainer` (its scorer TRAINED over the
+request's own labeled graphs — one label per graph, the lane's own
+422s when the labels are missing, misaligned, or riding another
+method), the `AttentionExplainer` coefficients (refused honestly on
+non-GAT models with the engine's own verbatim message), and
+`SubgraphX` (its own sampling scales — the iters knob honestly
+refused there); every per-graph row carrying the per-edge scores
+ALIGNED with the graph's own edge_index columns (re-served so the
+frontend's table and scatter never re-derive geometry), the
+fidelity_plus / fidelity_minus drops, the sparsity (the removed
+fraction), and the deterministic CIRCULAR node layout the backend
+computes (dependency-free, no spring iterations, the same graph
+always drawing the same way); the target stamp (one class for every
+explainer AND both fidelity passes — the request-level `target`
+stamped onto every graph's y, else the model's own argmax verdict);
+the explained subgraph never exceeding the full graph (top_edges is a
+sorted subset of the edge columns by construction). The GNN lane's
+edge-attribution card on the DL page (the method select + the
+top_k/seed/iters/target/labels controls, the same inline-graphs paste
+lane the predict card rides, the client pre-flight mirroring the
+route's own contract so a doomed request is refused here); the
+result rendering per graph: the fidelity line, the edge-importance
+table with the top rows highlighted (data-top), and the
+PlotlyFigure sized-edge scatter over the backend's own layout (the
+null-separated edge segments + the score-scaled midpoints + the node
+markers); 5 API tests (the two-graph fidelity fixture + the subgraph
+≤ full-graph clause + the target stamp + the subgraphx lane + the
+pgexplainer-trains-over-the-request's-own-labels lane + the honest
+404/422 septet including the engine's own GAT refusal) + 3 page
+vitests + 6 client-pair vitests + the 7-clause drift guard
+`tests/test_frontend_dl_gnn_explain.py`. The fourth 3-item set
+(ML-5 + DL-1 + DL-2) is now closed. The next row is DL-3 (the
+efficiency lab — the first row of the fifth set).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

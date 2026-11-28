@@ -49,6 +49,12 @@
  *   prediction path (labels + optional class probabilities); the
  *   tabular `POST /api/v1/ml/predict` route refuses graph models up
  *   front.
+ * * `POST /api/v1/dl/gnn-explain` — DL-2 (the roadmap's row 14): the
+ *   graph models' edge attribution over the REAL `gnnxai` engine
+ *   (sync by design): the chosen explainer's per-edge scores aligned
+ *   with each graph's own edge_index, the fidelity_plus/minus /
+ *   sparsity verdicts, and the deterministic circular node layout
+ *   (parse with parseGnnExplainResult).
  *
  * The training telemetry (the Monitor stage's live loss/validation
  * curves) arrives as `training.metrics` envelopes on the WS bus —
@@ -182,6 +188,34 @@ export interface DLModelView extends TrainedModelView {
   readonly predict_url: string;
 }
 
+/** DL-1 — one trial row of the search report (the engine's own row). */
+export interface DLTuneTrial {
+  readonly number: number;
+  readonly params: Readonly<Record<string, unknown>>;
+  /** The negated smaller-is-better objective (the optuna rule). */
+  readonly value: number;
+}
+
+/**
+ * DL-1 — the search report: the ML lane's TuneReport surface (the
+ * trial table + the best configuration + the best score) plus the
+ * honest extras — the refit's comparable score on the same carve,
+ * and the searched block echoed.  `best_score`/`refit_score` are
+ * bigger-is-better (accuracy / R², negated back from the study's
+ * convention); the trial `value` rides the study's own convention.
+ */
+export interface DLTuneReport {
+  readonly best_params: Readonly<Record<string, unknown>>;
+  readonly best_score: number;
+  readonly n_trials: number;
+  readonly task: string;
+  readonly trials: readonly DLTuneTrial[];
+  readonly refit_score: number;
+  readonly sampler: string;
+  readonly seed: number;
+  readonly searched: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+}
+
 /** The job-mode submission answer. */
 export interface DLJobResponse {
   readonly mode: "job";
@@ -192,6 +226,8 @@ export interface DLJobResponse {
 export interface DLTrainSyncResponse {
   readonly mode: "sync";
   readonly model: DLModelView;
+  /** DL-1 — the search report (null on the fixed-config lane). */
+  readonly tune: DLTuneReport | null;
 }
 
 export type DLTrainResponse = DLJobResponse | DLTrainSyncResponse;
@@ -236,6 +272,49 @@ export interface GnnPredictResponse {
   readonly probabilities: readonly number[][] | null;
 }
 
+/** DL-2 — one explained graph's edge-attribution row. */
+export interface GnnExplainGraphRow {
+  readonly index: number;
+  readonly n_nodes: number;
+  readonly n_edges: number;
+  readonly target_class: number;
+  readonly method: string;
+  readonly scores: readonly number[];
+  readonly top_edges: readonly number[];
+  readonly fidelity_plus: number;
+  readonly fidelity_minus: number;
+  readonly sparsity: number;
+  readonly extra: Readonly<Record<string, unknown>>;
+  readonly edge_index: readonly (readonly number[])[];
+  readonly layout: {
+    readonly kind: string;
+    readonly nodes: readonly (readonly number[])[];
+  };
+}
+
+/** DL-2 — the explain lane's request options (sync by design). */
+export interface GnnExplainOptions {
+  readonly modelId: string;
+  readonly graphs: readonly GnnGraphRow[];
+  readonly method: "gnnexplainer" | "pgexplainer" | "attention" | "subgraphx";
+  readonly topK: number;
+  readonly seed: number;
+  readonly target: number | null;
+  readonly labels: readonly number[] | null;
+  readonly iters: number | null;
+}
+
+/** DL-2 — the `POST /api/v1/dl/gnn-explain` answer (sync). */
+export interface GnnExplainResult {
+  readonly mode: "sync";
+  readonly model_id: string;
+  readonly method: string;
+  readonly top_k: number;
+  readonly seed: number;
+  readonly graphs: readonly GnnExplainGraphRow[];
+  readonly note: string;
+}
+
 /**
  * One per-epoch `training.metrics` envelope payload — the REAL
  * `on_epoch` telemetry dict `_training_progress_hook` publishes
@@ -263,7 +342,22 @@ export interface DLTrainOptions {
   /** Overrides for the signature defaults (null = the defaults). */
   readonly hyperparams: Record<string, unknown> | null;
   readonly mode?: "job" | "sync";
+  /**
+   * DL-1 (the roadmap's row 13) — the search lane: null/undefined =
+   * the fixed-config lane; given, the request carries `tune: true`
+   * plus the bounded per-key search block (each entry `choices` or
+   * `low`/`high` — `log` optional on the float lane).
+   */
+  readonly tune?: {
+    readonly search: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    readonly nTrials: number;
+    readonly sampler: "tpe" | "random";
+    readonly seed: number;
+  } | null;
 }
+
+/** The tune block's own shape (DL-1) — for pages that build it separately. */
+export type DLTrainOptionsTune = NonNullable<DLTrainOptions["tune"]>;
 
 /** One inline graph row — node features + the 2×E endpoints. */
 export interface GnnGraphRow {
@@ -351,6 +445,16 @@ export const dlApi = {
       network: options.network,
       hyperparams: options.hyperparams,
       mode: options.mode ?? "job",
+      // DL-1 — the search lane's fields always ride the request (the
+      // generated DTO marks them required; tune=false keeps the
+      // fixed-config lane byte-identical server-side)
+      tune: options.tune != null,
+      search: options.tune != null
+        ? (options.tune.search as unknown as DLTrainRequest["search"])
+        : null,
+      n_trials: options.tune?.nTrials ?? 12,
+      sampler: options.tune?.sampler ?? "tpe",
+      seed: options.tune?.seed ?? 0,
     };
     const raw = (await api.post(
       "/api/v1/dl/train",
@@ -360,6 +464,7 @@ export const dlApi = {
       return {
         mode: "sync",
         model: parseDLModelView(raw["model"], "dl.train(sync)"),
+        tune: parseDLTuneReport(raw["tune"], "dl.train(sync) tune"),
       };
     }
     return { mode: "job", job: parseJobView(raw["job"], "dl.train(job)") };
@@ -437,6 +542,34 @@ export const dlApi = {
       request,
     )) as Record<string, unknown>;
     return parseGnnPredictResult(raw, "dl.gnn-predict");
+  },
+
+  /**
+   * `POST /api/v1/dl/gnn-explain` — DL-2 (the roadmap's row 14):
+   * the graph models' edge attribution over the REAL gnnxai engine
+   * (the learned mask / the Shapley search / the GAT attention /
+   * the parametric scorer trained over the request's own labels).
+   * Sync by design (masked forward passes, seconds per graph).
+   */
+  async gnnExplain(options: GnnExplainOptions): Promise<GnnExplainResult> {
+    const request: Record<string, unknown> = {
+      model_id: options.modelId,
+      graphs: options.graphs.map((row) => ({
+        x: row.x.map((node) => [...node]),
+        edge_index: row.edge_index.map((endpoints) => [...endpoints]),
+      })),
+      method: options.method,
+      top_k: options.topK,
+      seed: options.seed,
+      target: options.target ?? undefined,
+      labels: options.labels ?? undefined,
+      iters: options.iters ?? undefined,
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/gnn-explain",
+      request,
+    )) as Record<string, unknown>;
+    return parseGnnExplainResult(raw, "dl.gnn-explain");
   },
 
   /**
@@ -742,6 +875,100 @@ export function parseDLTrainResult(
 }
 
 /**
+ * DL-1 — narrow the search report. A missing trial row value throws
+ * (a numberless verdict would fabricate a ranking); the fixed-config
+ * lane passes null and gets null back — the absence stays honest.
+ */
+export function parseDLTuneReport(
+  raw: unknown,
+  what: string,
+): DLTuneReport | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  const r = expectObject(raw, what);
+  const bestScore = asNumber(r["best_score"]);
+  const nTrials = r["n_trials"];
+  const refitScore = asNumber(r["refit_score"]);
+  const task = r["task"];
+  const sampler = r["sampler"];
+  const seed = asNumber(r["seed"]);
+  if (
+    bestScore === null ||
+    typeof nTrials !== "number" ||
+    refitScore === null ||
+    typeof task !== "string" ||
+    typeof sampler !== "string" ||
+    seed === null
+  ) {
+    throw new Error(
+      `${what}: best_score/n_trials/refit_score/task/sampler/seed ` +
+        "are not the report's own types",
+    );
+  }
+  const trialsRaw = r["trials"];
+  if (!Array.isArray(trialsRaw)) {
+    throw new Error(`${what}: trials is not an array`);
+  }
+  const trials: DLTuneTrial[] = [];
+  for (const trialRaw of trialsRaw as unknown[]) {
+    const row = expectObject(trialRaw, `${what} trial row`);
+    const value = asNumber(row["value"]);
+    const number = asNumber(row["number"]);
+    if (value === null || number === null) {
+      throw new Error(
+        `${what}: a trial row lost its number/value pair (the ` +
+          "ranking would be fabricated)",
+      );
+    }
+    const params = row["params"];
+    if (typeof params !== "object" || params === null) {
+      throw new Error(`${what}: a trial row lost its params`);
+    }
+    trials.push({
+      number,
+      params: params as Record<string, unknown>,
+      value,
+    });
+  }
+  const bestParams = r["best_params"];
+  if (typeof bestParams !== "object" || bestParams === null) {
+    throw new Error(`${what}: best_params is not an object`);
+  }
+  const searched = r["searched"];
+  if (typeof searched !== "object" || searched === null) {
+    throw new Error(`${what}: searched is not an object`);
+  }
+  return {
+    best_params: bestParams as Record<string, unknown>,
+    best_score: bestScore,
+    n_trials: nTrials,
+    task,
+    trials,
+    refit_score: refitScore,
+    sampler,
+    seed,
+    searched: searched as Record<string, Record<string, unknown>>,
+  };
+}
+
+/**
+ * DL-1 — narrow the tune lane's full result (the sync answer's own
+ * halves, or the job COMPLETED result): `{model, tune}` with the
+ * tune block null on the fixed-config lane.
+ */
+export function parseDLTuneResult(
+  raw: unknown,
+  what: string,
+): { model: DLModelView; tune: DLTuneReport | null } {
+  const r = expectObject(raw, what);
+  return {
+    model: parseDLModelView(r["model"], `${what} model`),
+    tune: parseDLTuneReport(r["tune"], `${what} tune`),
+  };
+}
+
+/**
  * Narrow one `training.metrics` envelope payload to the per-epoch
  * telemetry point (the Monitor stage's curve input). The payload is
  * untrusted wire data — every key surfaces as it arrives, a missing
@@ -861,6 +1088,127 @@ function parseGnnModelView(raw: unknown, what: string): GnnModelView {
   return {
     ...parseDLModelView(raw, what),
     graph_model: r["graph_model"] === true,
+  };
+}
+
+/**
+ * DL-2 — narrow the gnn-explain answer: every per-graph row must
+ * carry its scores aligned with the served edge_index (a row whose
+ * counts disagree throws — the scatter would fabricate geometry),
+ * and the fidelity verdicts stay floats (never nulls — an absent
+ * verdict is never an implied zero).
+ */
+export function parseGnnExplainResult(
+  raw: unknown,
+  what: string,
+): GnnExplainResult {
+  const r = expectObject(raw, what);
+  const modelId = r["model_id"];
+  const method = r["method"];
+  const topK = r["top_k"];
+  const seed = r["seed"];
+  const note = r["note"];
+  if (
+    typeof modelId !== "string" ||
+    typeof method !== "string" ||
+    typeof topK !== "number" ||
+    typeof seed !== "number" ||
+    typeof note !== "string"
+  ) {
+    throw new Error(
+      `${what}: model_id/method/top_k/seed/note are not the answer's own types`,
+    );
+  }
+  const graphsRaw = r["graphs"];
+  if (!Array.isArray(graphsRaw)) {
+    throw new Error(`${what}: graphs is not an array`);
+  }
+  const graphs: GnnExplainGraphRow[] = [];
+  for (const rowRaw of graphsRaw as unknown[]) {
+    const row = expectObject(rowRaw, `${what} graph row`);
+    const index = asNumber(row["index"]);
+    const nNodes = asNumber(row["n_nodes"]);
+    const nEdges = asNumber(row["n_edges"]);
+    const targetClass = asNumber(row["target_class"]);
+    const rowMethod = row["method"];
+    const fidelityPlus = asNumber(row["fidelity_plus"]);
+    const fidelityMinus = asNumber(row["fidelity_minus"]);
+    const sparsityValue = asNumber(row["sparsity"]);
+    if (
+      index === null || nNodes === null || nEdges === null ||
+      targetClass === null || typeof rowMethod !== "string" ||
+      fidelityPlus === null || fidelityMinus === null ||
+      sparsityValue === null
+    ) {
+      throw new Error(
+        `${what}: a graph row lost its counts/verdicts (an absent ` +
+          "fidelity is never an implied zero)",
+      );
+    }
+    const scores = row["scores"];
+    const topEdges = row["top_edges"];
+    const edgeIndex = row["edge_index"];
+    if (
+      !Array.isArray(scores) || !Array.isArray(topEdges) ||
+      !Array.isArray(edgeIndex)
+    ) {
+      throw new Error(
+        `${what}: a graph row lost its scores/top_edges/edge_index`,
+      );
+    }
+    if (scores.length !== edgeIndex.length || scores.length !== nEdges) {
+      throw new Error(
+        `${what}: a graph row's scores (${scores.length}) disagree ` +
+          `with its edge_index (${edgeIndex.length}) — the scatter ` +
+          "geometry would be fabricated",
+      );
+    }
+    const layoutRaw = row["layout"];
+    const layoutRow = expectObject(layoutRaw, `${what} layout`);
+    const layoutKind = layoutRow["kind"];
+    const layoutNodes = layoutRow["nodes"];
+    if (
+      typeof layoutKind !== "string" ||
+      !Array.isArray(layoutNodes) ||
+      layoutNodes.length !== nNodes
+    ) {
+      throw new Error(
+        `${what}: a graph row's layout lost its node positions`,
+      );
+    }
+    const extra = row["extra"];
+    graphs.push({
+      index,
+      n_nodes: nNodes,
+      n_edges: nEdges,
+      target_class: targetClass,
+      method: rowMethod,
+      scores: scores.filter((s): s is number => typeof s === "number"),
+      top_edges: topEdges.filter(
+        (e): e is number => typeof e === "number",
+      ),
+      fidelity_plus: fidelityPlus,
+      fidelity_minus: fidelityMinus,
+      sparsity: sparsityValue,
+      extra:
+        typeof extra === "object" && extra !== null
+          ? (extra as Record<string, unknown>)
+          : {},
+      edge_index: edgeIndex as readonly (readonly number[])[],
+      layout: {
+        kind: layoutKind,
+        nodes: layoutNodes as readonly (readonly number[])[],
+      },
+    });
+  }
+  return {
+    mode: "sync",
+    model_id: modelId,
+    method,
+    top_k: topK,
+    seed,
+    graphs,
+    note,
   };
 }
 

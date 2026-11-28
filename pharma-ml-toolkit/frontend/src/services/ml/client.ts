@@ -46,7 +46,14 @@
  *   COMPLETED result payload is `{analysis: {…as_dict()…, frame},
  *   artifact: ArtifactView | null}` — every key is surfaced as it
  *   arrives, validated at runtime.
- * * `POST /api/v1/semi-supervised/train` —
+ * * `POST /api/v1/ml/drift` — ML-5 (the roadmap's row 12): the batch-
+ *   level distribution-shift verdict (sync by design): the reference
+ *   (a session-trained model's own training dataset via `model_id`,
+ *   or a registered dataset via `dataset_id` — exactly one) vs the
+ *   current registered dataset; per-feature PSI + KS with the
+ *   credit-risk verdicts and the engine's own threshold constants
+ *   riding the payload (parse with parseDriftReport).
+ * `POST /api/v1/semi-supervised/train` —
  *   `SemiSupervisedTrainRequest` (classification datasets only — the
  *   backend 422s otherwise) → job mode; the COMPLETED result payload
  *   is `{semi_supervised: {…view…}}`.
@@ -540,6 +547,61 @@ export interface DomainBoxReport {
   readonly below: Readonly<Record<string, number>> | null;
   readonly above: Readonly<Record<string, number>> | null;
   readonly out: readonly boolean[] | null;
+}
+
+/** ML-5 — one per-feature drift row (PSI + KS + the verdict). */
+export interface DriftFeatureRow {
+  readonly feature: string;
+  readonly psi: number;
+  readonly ks_statistic: number | null;
+  readonly ks_pvalue: number | null;
+  readonly reference_mean: number;
+  readonly current_mean: number;
+  readonly mean_direction: "up" | "down" | "flat";
+  readonly verdict: "stable" | "moderate" | "shifted";
+}
+
+/** ML-5 — which frame the PSI sketches were built over. */
+export interface DriftReference {
+  readonly kind: "model" | "dataset";
+  readonly model_id: string | null;
+  readonly name: string | null;
+  readonly dataset_id: string | null;
+  readonly n_reference_rows: number;
+}
+
+/** ML-5 — the current batch the reference was compared against. */
+export interface DriftCurrent {
+  readonly dataset_id: string;
+  readonly name: string;
+  readonly n_rows: number;
+}
+
+/**
+ * The `POST /api/v1/ml/drift` answer (sync by design — the engine's
+ * own histogram sketches are sub-second at session sizes). The
+ * threshold constants ride the payload (never re-encoded in the UI);
+ * `n_features: 0` is the honest no-shared-numeric-features answer.
+ */
+export interface DriftResult {
+  readonly mode: "sync";
+  readonly reference: DriftReference;
+  readonly current: DriftCurrent;
+  readonly warn_psi: number;
+  readonly shift_psi: number;
+  readonly n_features: number;
+  readonly n_drifted: number;
+  readonly drift_share: number;
+  readonly features: readonly DriftFeatureRow[];
+  readonly drifted: readonly DriftFeatureRow[];
+  readonly summary: string;
+}
+
+/** The drift lane's request shape (exactly one reference source). */
+export interface DriftOptions {
+  readonly modelId: string | null;
+  readonly datasetId: string | null;
+  readonly newDatasetId: string;
 }
 
 /** The confidence summary (self-training only, as it arrives). */
@@ -2452,6 +2514,35 @@ export const mlApi = {
   },
 
   /**
+   * `POST /api/v1/ml/drift` — ML-5 (the roadmap's row 12): the batch-
+   * level distribution-shift verdict over the stored frames — the
+   * reference (a session-trained model's own training dataset, or a
+   * registered dataset) vs the current registered dataset.  Sync by
+   * design; the engine's own threshold constants ride the payload.
+   */
+  async drift(options: DriftOptions): Promise<DriftResult> {
+    if ((options.modelId === null) === (options.datasetId === null)) {
+      throw new Error(
+        "give either modelId or datasetId as the drift reference, " +
+          "not both/neither",
+      );
+    }
+    const request: Record<string, unknown> = {
+      new_dataset_id: options.newDatasetId,
+    };
+    if (options.modelId !== null) {
+      request["model_id"] = options.modelId;
+    } else {
+      request["dataset_id"] = options.datasetId;
+    }
+    const raw = (await api.post(
+      "/api/v1/ml/drift",
+      request,
+    )) as Record<string, unknown>;
+    return parseDriftReport(raw, "drift");
+  },
+
+  /**
    * `POST /api/v1/semi-supervised/train` — the REAL
    * train_semi_supervised engine on a registered dataset
    * (classification only; the backend 422s regression datasets).
@@ -3719,6 +3810,136 @@ export function parseTrainResult(raw: unknown, what: string): {
   return {
     model: parseTrainedModelView(r["model"], `${what} model`),
     split: parseTrainSplitBlock(r["split"], `${what} split`),
+  };
+}
+
+/**
+ * ML-5 — narrow the `/ml/drift` answer. Every count/threshold rides
+ * the payload (never re-encoded); a feature row that lost its PSI or
+ * verdict throws (a numberless verdict would fabricate drift
+ * silence); `n_features: 0` is the honest no-shared-features
+ * answer, not an error.
+ */
+export function parseDriftReport(
+  raw: unknown,
+  what: string,
+): DriftResult {
+  const r = expectObject(raw, what);
+  const warnPsi = asNumber(r["warn_psi"]);
+  const shiftPsi = asNumber(r["shift_psi"]);
+  if (warnPsi === null || shiftPsi === null) {
+    throw new Error(`${what}: warn_psi/shift_psi are not numbers`);
+  }
+  const nFeatures = r["n_features"];
+  const nDrifted = r["n_drifted"];
+  const driftShare = r["drift_share"];
+  if (
+    typeof nFeatures !== "number" ||
+    typeof nDrifted !== "number" ||
+    typeof driftShare !== "number"
+  ) {
+    throw new Error(
+      `${what}: n_features/n_drifted/drift_share are not numbers`,
+    );
+  }
+  const parseRow = (rowRaw: unknown, label: string): DriftFeatureRow => {
+    const row = expectObject(rowRaw, `${what} ${label}`);
+    const psi = asNumber(row["psi"]);
+    const verdict = row["verdict"];
+    if (
+      psi === null ||
+      (verdict !== "stable" &&
+        verdict !== "moderate" &&
+        verdict !== "shifted")
+    ) {
+      throw new Error(
+        `${what}: a ${label} row lost its psi/verdict pair ` +
+          `(or carries an unknown verdict)`,
+      );
+    }
+    const direction = row["mean_direction"];
+    if (
+      direction !== "up" && direction !== "down" && direction !== "flat"
+    ) {
+      throw new Error(
+        `${what}: a ${label} row lost its mean_direction`,
+      );
+    }
+    const refMean = asNumber(row["reference_mean"]);
+    const curMean = asNumber(row["current_mean"]);
+    if (refMean === null || curMean === null) {
+      throw new Error(
+        `${what}: a ${label} row lost its reference/current means`,
+      );
+    }
+    const feature = row["feature"];
+    if (typeof feature !== "string") {
+      throw new Error(`${what}: a ${label} row lost its feature name`);
+    }
+    return {
+      feature,
+      psi,
+      ks_statistic: asNumber(row["ks_statistic"]),
+      ks_pvalue: asNumber(row["ks_pvalue"]),
+      reference_mean: refMean,
+      current_mean: curMean,
+      mean_direction: direction,
+      verdict,
+    };
+  };
+  const featuresRaw = r["features"];
+  const driftedRaw = r["drifted"];
+  if (!Array.isArray(featuresRaw) || !Array.isArray(driftedRaw)) {
+    throw new Error(`${what}: features/drifted are not arrays`);
+  }
+  const reference = expectObject(r["reference"], `${what} reference`);
+  const current = expectObject(r["current"], `${what} current`);
+  const summary = r["summary"];
+  if (typeof summary !== "string") {
+    throw new Error(`${what}: summary is not a string`);
+  }
+  const referenceKind = reference["kind"];
+  if (referenceKind !== "model" && referenceKind !== "dataset") {
+    throw new Error(`${what}: the reference lost its kind`);
+  }
+  const nReferenceRows = asNumber(reference["n_reference_rows"]);
+  const currentName = asString(current["name"]);
+  const currentId = asString(current["dataset_id"]);
+  const nCurrentRows = asNumber(current["n_rows"]);
+  if (
+    nReferenceRows === null || currentName === null ||
+    currentId === null || nCurrentRows === null
+  ) {
+    throw new Error(
+      `${what}: the reference/current block lost its row counts`,
+    );
+  }
+  return {
+    mode: "sync",
+    reference: {
+      kind: referenceKind,
+      model_id: asString(reference["model_id"]),
+      name: asString(reference["name"]),
+      dataset_id: asString(reference["dataset_id"]),
+      n_reference_rows: nReferenceRows,
+    },
+    current: {
+      dataset_id: currentId,
+      name: currentName,
+      n_rows: nCurrentRows,
+    },
+    warn_psi: warnPsi,
+    shift_psi: shiftPsi,
+    n_features: nFeatures,
+    n_drifted: nDrifted,
+    drift_share: driftShare,
+    features: featuresRaw.map(
+      (row) => parseRow(row, "features"),
+    ),
+    drifted: driftedRaw.map(
+      (row) => parseRow(row, "drifted"),
+    ),
+    summary,
   };
 }
 
