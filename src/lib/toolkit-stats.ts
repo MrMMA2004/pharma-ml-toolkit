@@ -49,7 +49,12 @@
     the ML-3 train-lane split section -- 9 train-split API tests in
     tests/api/test_datasets_ml_artifacts.py + the drift guard
     extended from 7 to 14 tests). */
-export const SHIPPED_TEST_COUNT = 8329;
+/*  r376 re-true (the v1.2.248 ML-1 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,336
+    collected / 0 errors over 445 files (the +7/+1 over the r375
+    pin: the ML-1 model-evaluation consumer lane -- the new 7-test
+    drift guard tests/test_frontend_model_evaluation.py). */
+export const SHIPPED_TEST_COUNT = 8336;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -100,7 +105,12 @@ export const SHIPPED_TEST_COUNT = 8329;
     files (the +10/+2 over the r374 pin: the ML-3 lane -- the
     7-test train-split parser suite + the 3-test Configure Split/CV
     strategy suite). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 386;
+/*  r376 re-true (the v1.2.248 ML-1 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 403/403 over 48
+    files (the +17/+2 over the r375 pin: the ML-1 lane -- the
+    10-test model-evaluation parser suite + the 7-test conformal
+    panel page suite). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 403;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -193,7 +203,16 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 386;
     the toolkit dist-archive/ — the v1.2.246 pair stays, both homes
     accumulate per the ship convention; the +56.5 MB is exactly the
     two new 28,242,985-byte copies)). */
-export const SHIPPED_FILE_COUNT = 1920;
+/*  r376 re-true (the v1.2.248 ML-1 ship, measurement-last):
+    offline census replica re-walked the toolkit tree at the
+    close-out fixed point -- 1,925 files / 172 dirs / 904,061,972 B
+    (the +5 files over the r375 pin: the two ML-1 vitest files +
+    the new drift guard tests/test_frontend_model_evaluation.py +
+    the two new in-tree v1.2.248 zip homes (the toolkit download/ +
+    the toolkit dist-archive/ -- both homes accumulate per the ship
+    convention; the +56.6 MB is exactly the two new 28,262,278-byte
+    copies)). */
+export const SHIPPED_FILE_COUNT = 1925;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this

@@ -252,7 +252,7 @@ and the satellite routers is consumed — except two whole families below.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | ML-1 — A client + "Uncertainty" panel for the `/api/v1/model-evaluation` family |
-| Current status | Partial (backend Implemented; frontend consumer Missing) |
+| Current status | **Implemented (round 376, v1.2.248)** — `modelEvaluationApi`'s four typed operations + the stage-19 conformal panel (the bounded column bridge, the interval/label-set readouts, the Wilson-bounded coverage table, the catalog's honesty notes) |
 | Problem | `routes/model_evaluation.py` serves four routes — `/catalog`, `/conformal-regression` (split-conformal intervals + optional group/scaffold-wise coverage), `/conformal-classification` (marginal and label-conditional sets), `/coverage-diagnostics` (Wilson-bounded coverage report) — all sync-only over session-trained models. `rg model-evaluation frontend/src` matches only `types/api.d.ts`: no service function, no UI. The page's stage 19 "Explainability & Uncertainty" (`MLPage.tsx:5413`) therefore offers only the SHAP lane + the AD bootstrap, and its own caption admits the bootstrap is "the uncertainty surface that also runs today". |
 | Proposed solution | Add `modelEvaluationApi` (the 4 typed operations, strict parsers) to the ML client; extend stage 19 with a conformal panel: pick a trained model + a held-out calibration slice (the bounded column bridge already used by the AD stage), α + (for classification) conditional mode; render the interval radius, per-row bounds, empirical coverage, and the group/scaffold coverage table. Optionally add `quantile_prediction_intervals` (`ml/applicability.py:721`, also un-routed) as a second engine behind the same panel. |
 | Scientific value | Distribution-free prediction intervals/label sets are the honest answer to "how wrong might this prediction be" — the missing half of a point-prediction readout, without the bootstrap's refit cost. |
@@ -953,6 +953,25 @@ API tests + 14 drift-guard tests (the guard extended to the train lane) +
 7 parser vitests + 3 page vitests, the contract re-exported (142 paths /
 97 schemas). The next row is ML-1 (the four finished
 `/model-evaluation` routes with zero consumers).
+
+— execution log: **row 3 (ML-1) executed in round 376 at v1.2.248** — the
+`modelEvaluationApi` client (the four typed operations over the finished
+`/model-evaluation` family: catalog, conformal-regression,
+conformal-classification, coverage-diagnostics — every answer narrowed
+through strict runtime parsers), the Explainability & Uncertainty stage's
+conformal panel (the calibration + test slices over the bounded column
+bridge with the requested-ratio cap, alpha + the conditional selector +
+the SMILES column pick, the interval bounds table + the empirical
+coverage line + the Wilson-bounded scaffold coverage table, the family
+catalog's honesty notes rendered beside the controls, the
+finite-sample-overlap caveat), 17 vitests + the new drift guard
+`tests/test_frontend_model_evaluation.py` (7 tests) + the ml-workspace
+guard extended (the family joined the route-coverage tuple + the
+four-path consumption pin); a carrier drift caught by the
+diagnostics-version guard (frontend/src/lib/version.ts stuck at
+1.2.246 across the r375 bump) trued in the 1.2.248 lockstep. The next
+row is GEN-1 (the mutation/crossover operator modes on the
+generative optimize route).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

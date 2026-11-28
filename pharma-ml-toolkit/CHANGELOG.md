@@ -1,3 +1,62 @@
+## [1.2.248] — 2026-11-29 — round 376 (the 169th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — ML-1, the P1 row 3, the model-evaluation family's frontend consumer; trace 1a220a031331016d)
+
+- **ML-1 (the roadmap's row 3 — the four finished model-evaluation
+  routes gain their frontend consumer)**: `modelEvaluationApi` joins
+  the ml client — the four typed operations over the finished
+  `/api/v1/model-evaluation` family (`catalog`, `conformal-regression`,
+  `conformal-classification`, `coverage-diagnostics`), every answer
+  narrowed field-by-field through strict runtime parsers
+  (`parseConformalRegressionResult` /
+  `parseConformalClassificationResult` /
+  `parseCoverageDiagnosticsBlock` — one parser, the three call sites
+  that share the Wilson-bounded shape; `parseModelEvaluationCatalog`)
+  so a malformed payload fails loudly at the parse boundary instead
+  of rendering as a blank card. The wire bodies mirror the backend's
+  pydantic requests field-for-field (pinned by the new drift guard —
+  the field-mirror rule the ml-workspace family already pins for
+  train / predict / AD analyze).
+- **The Explainability & Uncertainty stage gains the conformal
+  panel** beside the SHAP card: pick the trained model (regression →
+  the interval lane, classification → the label-set lane with the
+  split/label conditional selector), the calibration + test slices
+  ride the bounded column bridge over the model's own dataset (the
+  AD stage's own `datasetsApi.column` lane — the slice sizes cap to
+  the rows the bridge assembles, preserving the requested
+  calibration:test ratio), alpha + the SMILES column pick for the
+  scaffold-wise coverage table. The readout renders the interval
+  radius / mean width / calibration rank, the per-row bounds table
+  (bounded to the first 20 rows), the empirical coverage line
+  ("empirical, never the guarantee"), the label sets with sizes and
+  per-class coverage, and the Wilson-bounded coverage table (overall
+  + per scaffold/group with the bounds). The family catalog's own
+  honesty notes render beside the controls — "empirical coverage is
+  empirical, never the conformal guarantee" and the
+  calibration-rows-must-never-have-trained-the-model caveat, plus the
+  panel's own honest line: rows overlapping the training frame void
+  the finite-sample guarantee (train with a split carve and
+  calibrate on rows the model never saw).
+- **The evidence**: 17 vitests (10 parser tests over the strict
+  narrowing — payload narrowing, malformed-throw, the absent-block
+  nulls; 7 page tests over the full MLPage mount — the bridge wire
+  contract pinned end-to-end, the interval bounds + the scaffold
+  coverage table rendered from a mocked route payload, the no-SMILES
+  honest lane, the degenerate-dataset refusal), the new drift guard
+  `tests/test_frontend_model_evaluation.py` (7 tests: the four paths
+  stay consumed, the three wire mirrors, the conditional literals
+  pinned both ends, the honest-panel markers, the contract declares
+  the family), the ml-workspace guard extended with the
+  model_evaluation.py family + the four-path consumption pin, the
+  full suite 403/403 over 48 files, tsc 0.
+- **A carrier drift found and trued**: `frontend/src/lib/version.ts`
+  (`APP_VERSION`) had been left at 1.2.246 by the r375 lockstep (the
+  diagnostics-version guard caught it — `tests/test_frontend_settings.py::test_the_version_carrier_lockstep`,
+  the same battery-boundary lesson as the r375 CI catch: the local
+  battery had not included the settings suite); trued straight to
+  1.2.248 in this lockstep.
+- NO release (per the standing authorization rule): no tag, no
+  installer — v1.2.244 stands published; the tracked homes add the
+  248 zip alongside the 246/247 pairs.
+
 ## [1.2.247] — 2026-11-29 — round 375 (the 168th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — ML-3, the P1 row 2, the split-strategy section inside the Train lane; trace 1a220515bfea9fed)
 
 - **ML-3 (the roadmap's row 2 — the GUI's training path gains the

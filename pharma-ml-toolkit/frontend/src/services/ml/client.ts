@@ -6793,3 +6793,513 @@ export function parseWorkflowRunsResponse(
     note: asString(r["note"]) ?? "",
   };
 }
+
+// ---------------------------------------------------------------------------
+// ML-1 — the model-evaluation family client (the four conformal routes,
+// the roadmap's row 3: the finished backend family with zero consumers
+// gets its typed frontend lane)
+// ---------------------------------------------------------------------------
+
+/** The conditional-mode Literal the classification route carries. */
+export const MODEL_EVALUATION_CONDITIONAL_LITERALS = [
+  "split",
+  "label",
+] as const;
+
+/** `GET /api/v1/model-evaluation/catalog` — the family's own census. */
+export interface ModelEvaluationCatalog {
+  readonly entry_points: readonly {
+    route: string;
+    backend: string;
+    defaults: Record<string, unknown>;
+  }[];
+  readonly interval_columns: readonly string[];
+  readonly set_columns: readonly string[];
+  readonly coverage_columns: readonly string[];
+  readonly notes: readonly string[];
+}
+
+/** One conformal interval row (input order: prediction, lower, upper). */
+export interface ConformalIntervalRow {
+  readonly prediction: number;
+  readonly lower: number;
+  readonly upper: number;
+}
+
+/** The empirical block — present only when independent labels rode the
+ * request (empirical, never the conformal guarantee). */
+export interface ConformalEmpirical {
+  readonly n_test: number;
+  readonly n_covered: number | null;
+  readonly coverage: number | null;
+}
+
+/** One Wilson-bounded coverage row (the group / scaffold table). */
+export interface CoverageGroupRow {
+  readonly group: string | number;
+  readonly n_test: number;
+  readonly n_covered: number;
+  readonly coverage: number | null;
+  readonly lower: number | null;
+  readonly upper: number | null;
+  readonly mean_size: number | null;
+}
+
+/** The coverage-diagnostics block — the shared shape of the standalone
+ * route's answer, the regression lane's `coverage_diagnostics` and the
+ * classification lane's `per_class`. */
+export interface CoverageDiagnosticsBlock {
+  readonly mode: string;
+  readonly confidence: number;
+  readonly overall: CoverageGroupRow;
+  readonly groups: readonly CoverageGroupRow[];
+}
+
+/** `POST /api/v1/model-evaluation/conformal-regression` — the
+ * split-conformal interval lane's full answer. */
+export interface ConformalRegressionResult {
+  readonly alpha: number;
+  readonly radius: number;
+  readonly n_calibration: number;
+  readonly rank: number;
+  readonly mean_width: number;
+  readonly feature_names: readonly string[];
+  readonly intervals: readonly ConformalIntervalRow[] | null;
+  readonly empirical: ConformalEmpirical | null;
+  readonly coverage_diagnostics: CoverageDiagnosticsBlock | null;
+}
+
+/** One prediction-set row (input order; `covered` only with labels). */
+export interface ConformalSetRow {
+  readonly prediction_set: readonly unknown[];
+  readonly set_size: number;
+  readonly covered: boolean | null;
+}
+
+/** `POST /api/v1/model-evaluation/conformal-classification` — the
+ * label-set lane's full answer (marginal split or label-conditional). */
+export interface ConformalClassificationResult {
+  readonly alpha: number;
+  readonly conditional: string;
+  readonly classes: readonly unknown[];
+  readonly n_calibration: number;
+  readonly threshold: number | null;
+  readonly class_thresholds: Readonly<Record<string, number>> | null;
+  readonly calibration_summary: readonly Record<string, unknown>[] | null;
+  readonly sets: readonly ConformalSetRow[] | null;
+  readonly empirical: {
+    readonly n_test: number;
+    readonly n_covered: number | null;
+    readonly coverage: number | null;
+    readonly mean_set_size: number;
+  } | null;
+  readonly per_class: CoverageDiagnosticsBlock | null;
+}
+
+function _coverageGroupRow(
+  raw: unknown,
+  what: string,
+): CoverageGroupRow {
+  const r = expectObject(raw, what);
+  const group = r["group"];
+  if (
+    typeof group !== "string" &&
+    typeof group !== "number"
+  ) {
+    throw new Error(`${what}: group is not a string or number`);
+  }
+  const nTest = r["n_test"];
+  const nCovered = r["n_covered"];
+  if (typeof nTest !== "number" || typeof nCovered !== "number") {
+    throw new Error(`${what}: n_test/n_covered are not numbers`);
+  }
+  return {
+    group,
+    n_test: nTest,
+    n_covered: nCovered,
+    coverage: asNumber(r["coverage"]),
+    lower: asNumber(r["lower"]),
+    upper: asNumber(r["upper"]),
+    mean_size: asNumber(r["mean_size"]),
+  };
+}
+
+/** Narrow the shared coverage-diagnostics block (the standalone route,
+ * the regression lane's `coverage_diagnostics`, the classification
+ * lane's `per_class` — one parser, three call sites). */
+export function parseCoverageDiagnosticsBlock(
+  raw: unknown,
+  what: string,
+): CoverageDiagnosticsBlock {
+  const r = expectObject(raw, what);
+  const mode = r["mode"];
+  const confidence = r["confidence"];
+  if (typeof mode !== "string" || typeof confidence !== "number") {
+    throw new Error(`${what}: mode/confidence are malformed`);
+  }
+  const overall = _coverageGroupRow(
+    r["overall"],
+    `${what} overall`,
+  );
+  const groupsRaw = r["groups"];
+  if (!Array.isArray(groupsRaw)) {
+    throw new Error(`${what}: groups is not an array`);
+  }
+  return {
+    mode,
+    confidence,
+    overall,
+    groups: groupsRaw.map((row, i) =>
+      _coverageGroupRow(row, `${what} groups[${i}]`),
+    ),
+  };
+}
+
+/** Narrow the regression lane's answer field-by-field — a malformed
+ * payload fails loudly at the parse boundary, never renders as if it
+ * were honest. */
+export function parseConformalRegressionResult(
+  raw: unknown,
+  what: string,
+): ConformalRegressionResult {
+  const r = expectObject(raw, what);
+  const alpha = r["alpha"];
+  const radius = r["radius"];
+  const nCalibration = r["n_calibration"];
+  const rank = r["rank"];
+  const meanWidth = r["mean_width"];
+  if (
+    typeof alpha !== "number" ||
+    typeof radius !== "number" ||
+    typeof nCalibration !== "number" ||
+    typeof rank !== "number" ||
+    typeof meanWidth !== "number"
+  ) {
+    throw new Error(
+      `${what}: alpha/radius/n_calibration/rank/mean_width are not numbers`,
+    );
+  }
+  const featureNames = r["feature_names"];
+  if (!Array.isArray(featureNames)) {
+    throw new Error(`${what}: feature_names is not an array`);
+  }
+  const intervalsRaw = r["intervals"];
+  let intervals: readonly ConformalIntervalRow[] | null = null;
+  if (Array.isArray(intervalsRaw)) {
+    intervals = intervalsRaw.map((row, i) => {
+      const rr = expectObject(row, `${what} intervals[${i}]`);
+      const prediction = rr["prediction"];
+      const lower = rr["lower"];
+      const upper = rr["upper"];
+      if (
+        typeof prediction !== "number" ||
+        typeof lower !== "number" ||
+        typeof upper !== "number"
+      ) {
+        throw new Error(
+          `${what} intervals[${i}]: bounds are not numbers`,
+        );
+      }
+      return { prediction, lower, upper };
+    });
+  }
+  const empiricalRaw = r["empirical"];
+  let empirical: ConformalEmpirical | null = null;
+  if (typeof empiricalRaw === "object" && empiricalRaw !== null) {
+    const er = expectObject(empiricalRaw, `${what} empirical`);
+    const nTest = er["n_test"];
+    if (typeof nTest !== "number") {
+      throw new Error(`${what} empirical: n_test is not a number`);
+    }
+    empirical = {
+      n_test: nTest,
+      n_covered: asNumber(er["n_covered"]),
+      coverage: asNumber(er["coverage"]),
+    };
+  }
+  const diagnosticsRaw = r["coverage_diagnostics"];
+  const coverageDiagnostics =
+    diagnosticsRaw === null || diagnosticsRaw === undefined
+      ? null
+      : parseCoverageDiagnosticsBlock(
+          diagnosticsRaw,
+          `${what} coverage_diagnostics`,
+        );
+  return {
+    alpha,
+    radius,
+    n_calibration: nCalibration,
+    rank,
+    mean_width: meanWidth,
+    feature_names: featureNames.map((name) => String(name)),
+    intervals,
+    empirical,
+    coverage_diagnostics: coverageDiagnostics,
+  };
+}
+
+/** Narrow the classification lane's answer field-by-field. */
+export function parseConformalClassificationResult(
+  raw: unknown,
+  what: string,
+): ConformalClassificationResult {
+  const r = expectObject(raw, what);
+  const alpha = r["alpha"];
+  const conditional = r["conditional"];
+  const nCalibration = r["n_calibration"];
+  if (
+    typeof alpha !== "number" ||
+    typeof conditional !== "string" ||
+    typeof nCalibration !== "number"
+  ) {
+    throw new Error(
+      `${what}: alpha/conditional/n_calibration are malformed`,
+    );
+  }
+  if (
+    !(MODEL_EVALUATION_CONDITIONAL_LITERALS as readonly string[]).includes(
+      conditional,
+    )
+  ) {
+    throw new Error(
+      `${what}: conditional is not one of the route's literals`,
+    );
+  }
+  const classesRaw = r["classes"];
+  if (!Array.isArray(classesRaw)) {
+    throw new Error(`${what}: classes is not an array`);
+  }
+  const setsRaw = r["sets"];
+  let sets: readonly ConformalSetRow[] | null = null;
+  if (Array.isArray(setsRaw)) {
+    sets = setsRaw.map((row, i) => {
+      const rr = expectObject(row, `${what} sets[${i}]`);
+      const predictionSet = rr["prediction_set"];
+      const setSize = rr["set_size"];
+      if (!Array.isArray(predictionSet) || typeof setSize !== "number") {
+        throw new Error(
+          `${what} sets[${i}]: prediction_set/set_size are malformed`,
+        );
+      }
+      const covered = rr["covered"];
+      return {
+        prediction_set: predictionSet,
+        set_size: setSize,
+        covered:
+          covered === undefined || covered === null
+            ? null
+            : asBoolean(covered),
+      };
+    });
+  }
+  const empiricalRaw = r["empirical"];
+  let empirical: ConformalClassificationResult["empirical"] = null;
+  if (typeof empiricalRaw === "object" && empiricalRaw !== null) {
+    const er = expectObject(empiricalRaw, `${what} empirical`);
+    const nTest = er["n_test"];
+    const meanSetSize = er["mean_set_size"];
+    if (
+      typeof nTest !== "number" ||
+      typeof meanSetSize !== "number"
+    ) {
+      throw new Error(
+        `${what} empirical: n_test/mean_set_size are not numbers`,
+      );
+    }
+    empirical = {
+      n_test: nTest,
+      n_covered: asNumber(er["n_covered"]),
+      coverage: asNumber(er["coverage"]),
+      mean_set_size: meanSetSize,
+    };
+  }
+  const perClassRaw = r["per_class"];
+  const perClass =
+    perClassRaw === null || perClassRaw === undefined
+      ? null
+      : parseCoverageDiagnosticsBlock(perClassRaw, `${what} per_class`);
+  const classThresholdsRaw = r["class_thresholds"];
+  const classThresholds =
+    typeof classThresholdsRaw === "object" && classThresholdsRaw !== null
+      ? (Object.fromEntries(
+          Object.entries(classThresholdsRaw as Record<string, unknown>).map(
+            ([key, value]) => [key, Number(value)],
+          ),
+        ) as Record<string, number>)
+      : null;
+  const summaryRaw = r["calibration_summary"];
+  const calibrationSummary = Array.isArray(summaryRaw)
+    ? (summaryRaw as Record<string, unknown>[])
+    : null;
+  return {
+    alpha,
+    conditional,
+    classes: classesRaw,
+    n_calibration: nCalibration,
+    threshold: asNumber(r["threshold"]),
+    class_thresholds: classThresholds,
+    calibration_summary: calibrationSummary,
+    sets,
+    empirical,
+    per_class: perClass,
+  };
+}
+
+/** Narrow the catalog answer (the family's own honesty notes ride in). */
+export function parseModelEvaluationCatalog(
+  raw: unknown,
+  what: string,
+): ModelEvaluationCatalog {
+  const r = expectObject(raw, what);
+  const entryRaw = r["entry_points"];
+  if (!Array.isArray(entryRaw)) {
+    throw new Error(`${what}: entry_points is not an array`);
+  }
+  return {
+    entry_points: entryRaw.map((row, i) => {
+      const rr = expectObject(row, `${what} entry_points[${i}]`);
+      const route = rr["route"];
+      const backend = rr["backend"];
+      if (typeof route !== "string" || typeof backend !== "string") {
+        throw new Error(
+          `${what} entry_points[${i}]: route/backend are not strings`,
+        );
+      }
+      const defaults =
+        typeof rr["defaults"] === "object" && rr["defaults"] !== null
+          ? (rr["defaults"] as Record<string, unknown>)
+          : {};
+      return { route, backend, defaults };
+    }),
+    interval_columns: Array.isArray(r["interval_columns"])
+      ? (r["interval_columns"] as unknown[]).map(String)
+      : [],
+    set_columns: Array.isArray(r["set_columns"])
+      ? (r["set_columns"] as unknown[]).map(String)
+      : [],
+    coverage_columns: Array.isArray(r["coverage_columns"])
+      ? (r["coverage_columns"] as unknown[]).map(String)
+      : [],
+    notes: Array.isArray(r["notes"])
+      ? (r["notes"] as unknown[]).filter(
+          (note): note is string => typeof note === "string",
+        )
+      : [],
+  };
+}
+
+/** The regression lane's request payload (the wire shape the backend's
+ * `ConformalRegressionRequest` defines — field-for-field). */
+export interface ConformalRegressionParams {
+  readonly modelId: string;
+  readonly xCal: readonly (readonly number[])[];
+  readonly yCal: readonly number[];
+  readonly xTest: readonly (readonly number[])[] | null;
+  readonly yTest: readonly number[] | null;
+  readonly alpha: number;
+  readonly groups: readonly (string | number)[] | null;
+  readonly smiles: readonly string[] | null;
+}
+
+/** The classification lane's request payload. */
+export interface ConformalClassificationParams {
+  readonly modelId: string;
+  readonly xCal: readonly (readonly number[])[];
+  readonly yCal: readonly (number | string)[];
+  readonly xTest: readonly (readonly number[])[] | null;
+  readonly yTest: readonly (number | string)[] | null;
+  readonly alpha: number;
+  readonly conditional: "split" | "label";
+}
+
+/** The standalone coverage-diagnostics request payload. */
+export interface CoverageDiagnosticsParams {
+  readonly covered: readonly boolean[];
+  readonly groups: readonly (string | number)[] | null;
+  readonly smiles: readonly string[] | null;
+  readonly sizes: readonly number[] | null;
+  readonly confidence: number;
+}
+
+/** `modelEvaluationApi` — the four typed operations over the finished
+ * model-evaluation route family (ML-1: the routes existed with zero
+ * consumers; this client is the consumer, every answer narrowed through
+ * the strict parsers above). */
+export const modelEvaluationApi = {
+  /** `GET /api/v1/model-evaluation/catalog` — the family census. */
+  async catalog(): Promise<ModelEvaluationCatalog> {
+    const raw = await api.get<Record<string, unknown>>(
+      "/api/v1/model-evaluation/catalog",
+    );
+    return parseModelEvaluationCatalog(raw, "model-evaluation catalog");
+  },
+
+  /** `POST /api/v1/model-evaluation/conformal-regression` — the
+   * split-conformal interval lane (sync by design: one predict pass +
+   * a quantile). */
+  async conformalRegression(
+    params: ConformalRegressionParams,
+  ): Promise<ConformalRegressionResult> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/model-evaluation/conformal-regression",
+      {
+        model_id: params.modelId,
+        x_cal: params.xCal,
+        y_cal: params.yCal,
+        x_test: params.xTest,
+        y_test: params.yTest,
+        alpha: params.alpha,
+        groups: params.groups,
+        smiles: params.smiles,
+      },
+    );
+    return parseConformalRegressionResult(
+      raw,
+      "conformal-regression result",
+    );
+  },
+
+  /** `POST /api/v1/model-evaluation/conformal-classification` — the
+   * marginal / label-conditional label-set lane. */
+  async conformalClassification(
+    params: ConformalClassificationParams,
+  ): Promise<ConformalClassificationResult> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/model-evaluation/conformal-classification",
+      {
+        model_id: params.modelId,
+        x_cal: params.xCal,
+        y_cal: params.yCal,
+        x_test: params.xTest,
+        y_test: params.yTest,
+        alpha: params.alpha,
+        conditional: params.conditional,
+      },
+    );
+    return parseConformalClassificationResult(
+      raw,
+      "conformal-classification result",
+    );
+  },
+
+  /** `POST /api/v1/model-evaluation/coverage-diagnostics` — the
+   * Wilson-bounded coverage report over a covered vector. */
+  async coverageDiagnostics(
+    params: CoverageDiagnosticsParams,
+  ): Promise<CoverageDiagnosticsBlock> {
+    const raw = await api.post<Record<string, unknown>>(
+      "/api/v1/model-evaluation/coverage-diagnostics",
+      {
+        covered: params.covered,
+        groups: params.groups,
+        smiles: params.smiles,
+        sizes: params.sizes,
+        confidence: params.confidence,
+      },
+    );
+    return parseCoverageDiagnosticsBlock(
+      raw,
+      "coverage-diagnostics result",
+    );
+  },
+};

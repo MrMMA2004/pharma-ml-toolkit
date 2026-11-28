@@ -131,7 +131,10 @@ def test_ml_rest_surface_covered() -> None:
     # multiresponse.py joined at r358 (the part17 §5 M1 quartet) and
     # rsm.py at r359 (the part17 §6 R1 septet) — the two new families
     # the ml client carries, the same one-DTO rule.
-    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py", "artifacts.py", "multiresponse.py", "rsm.py"):
+    # model_evaluation.py joined at r376 (ML-1, the roadmap's row 3):
+    # the four finished conformal routes finally gained their frontend
+    # consumer — the drift-guard pin below keeps them consumed.
+    for module in ("ml.py", "applicability_domain.py", "semi_supervised.py", "admet.py", "dta.py", "repurposing.py", "drugresponse.py", "pharmacogenomics.py", "multiobjective.py", "workflow.py", "artifacts.py", "multiresponse.py", "rsm.py", "model_evaluation.py"):
         real.update(_backend_routes(module))
     unknown = carried - set(real)
     assert not unknown, f"ml client calls undeclared routes: {sorted(unknown)}"
@@ -141,6 +144,14 @@ def test_ml_rest_surface_covered() -> None:
                  "/api/v1/semi-supervised/train"):
         assert path in carried, f"the workflow stopped calling {path}"
         assert path in real, f"the backend stopped declaring {path}"
+    # the ML-1 consumption pin (the roadmap's row 3 acceptance): the
+    # four model-evaluation paths stay consumed by the ml client
+    for path in ("/api/v1/model-evaluation/catalog",
+                 "/api/v1/model-evaluation/conformal-regression",
+                 "/api/v1/model-evaluation/conformal-classification",
+                 "/api/v1/model-evaluation/coverage-diagnostics"):
+        assert path in carried, f"the ml client stopped calling {path}"
+        assert path in real, f"routes/model_evaluation.py stopped declaring {path}"
     # the §8 workflow-builder lane's own calls (the r323 GUI leg over
     # the r322 route family)
     for path in ("/api/v1/workflow/steps", "/api/v1/workflow/templates",

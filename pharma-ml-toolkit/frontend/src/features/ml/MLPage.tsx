@@ -56,6 +56,8 @@ import {
   DTA_MAX_PAIRS,
   EXPLAIN_MAX_ROWS,
   mlApi,
+  modelEvaluationApi,
+  MODEL_EVALUATION_CONDITIONAL_LITERALS,
   parseADAnalyzeResult,
   parseSemiSupervisedResult,
   parseSemiSupervisedEvaluation,
@@ -63,6 +65,9 @@ import {
   parseWilliamsResult,
   type ADAnalyzeResult,
   type ADFrameRow,
+  type ConformalClassificationResult,
+  type ConformalRegressionResult,
+  type ModelEvaluationCatalog,
   type AdmetEndpointsResponse,
   type AdmetScoreResponse,
   type AdmetScoreRow,
@@ -1048,6 +1053,30 @@ export function MLPage() {
     Record<string, string>
   >({});
 
+  // stage 12b: the ML-1 conformal panel (the model-evaluation family's
+  // consumer — the calibration slice rides the bounded column bridge)
+  const [cfAlpha, setCfAlpha] = useState(0.1);
+  const [cfConditional, setCfConditional] = useState<"split" | "label">(
+    "split",
+  );
+  const [cfCalRows, setCfCalRows] = useState(200);
+  const [cfTestRows, setCfTestRows] = useState(100);
+  const [cfSmilesColumn, setCfSmilesColumn] = useState("");
+  const [cfBusy, setCfBusy] = useState(false);
+  const [cfError, setCfError] = useState<string | null>(null);
+  const [cfRegResult, setCfRegResult] = useState<ConformalRegressionResult | null>(null);
+  const [cfClsResult, setCfClsResult] = useState<ConformalClassificationResult | null>(null);
+  const [cfSlice, setCfSlice] = useState<{
+    cal: number;
+    test: number;
+    datasetRows: number;
+    skipped: number;
+    truncated: boolean;
+    smilesColumn: string | null;
+  } | null>(null);
+  const [cfCatalog, setCfCatalog] = useState<ModelEvaluationCatalog | null>(null);
+  const [cfCatalogError, setCfCatalogError] = useState<string | null>(null);
+
   // stage 13: export + the verified download
   const [exportFormat, setExportFormat] = useState<"csv" | "tsv" | "xlsx">("csv");
   const [exportArtifact, setExportArtifact] = useState<ArtifactView | null>(null);
@@ -1402,6 +1431,11 @@ export function MLPage() {
     setSelectedModel("");
     setSplitSmilesColumn("");
     setSplitGroupColumn("");
+    setCfRegResult(null);
+    setCfClsResult(null);
+    setCfSlice(null);
+    setCfError(null);
+    setCfSmilesColumn("");
     try {
       const view = await datasetsApi.view(datasetId);
       setSelected(view);
@@ -2951,6 +2985,208 @@ export function MLPage() {
       setExBusy(false);
     }
   }, [selectedTrained, exMaxRows, exFigure]);
+
+  // stage 12b: the ML-1 conformal lane — the calibration slice rides the
+  // bounded column bridge over the model's own dataset (the same
+  // datasetsApi.column lane the AD stage uses; the SMILES column rides
+  // along for the scaffold-wise coverage table when one is picked)
+  const handleConformalRun = useCallback(async () => {
+    if (selectedTrained === null) {
+      return;
+    }
+    if (cfCalRows < 2 || cfTestRows < 1) {
+      setCfError(
+        "the calibration slice needs at least 2 rows and the test slice at least 1 (the routes' own bounds)",
+      );
+      return;
+    }
+    if (!(cfAlpha > 0 && cfAlpha < 1)) {
+      setCfError("alpha must be strictly between 0 and 1");
+      return;
+    }
+    setCfError(null);
+    setCfBusy(true);
+    setCfRegResult(null);
+    setCfClsResult(null);
+    setCfSlice(null);
+    try {
+      const datasetId = selectedTrained.dataset_id;
+      const features = selectedTrained.features;
+      if (features.length === 0) {
+        throw new Error("the trained model's view carries no feature list");
+      }
+      const target = selectedTrained.target;
+      if (target === null || target === "") {
+        throw new Error(
+          "the trained model's view carries no target column (the calibration labels)",
+        );
+      }
+      const limit = cfCalRows + cfTestRows;
+      const featureColumns = await Promise.all(
+        features.map((name) => datasetsApi.column(datasetId, name, limit)),
+      );
+      const targetColumn = await datasetsApi.column(
+        datasetId,
+        target,
+        limit,
+      );
+      const returned = Math.min(
+        ...featureColumns.map((column) => column.returned),
+        targetColumn.returned,
+      );
+      const datasetRows = targetColumn.n_rows ?? 0;
+      const truncated =
+        featureColumns.some((column) => column.truncated) ||
+        targetColumn.truncated;
+      const smilesColumn =
+        cfSmilesColumn !== "" &&
+        (selected?.columns ?? []).includes(cfSmilesColumn)
+          ? cfSmilesColumn
+          : null;
+      const smilesColumnData =
+        smilesColumn !== null
+          ? await datasetsApi.column(datasetId, smilesColumn, limit)
+          : null;
+      const cal: number[][] = [];
+      const test: number[][] = [];
+      const yCal: number[] = [];
+      const yTest: number[] = [];
+      const testSmiles: string[] = [];
+      const testLabels: (string | number)[] = [];
+      const calLabels: (string | number)[] = [];
+      const isRegression = selectedTrained.task === "regression";
+      // cap the slice sizes to the rows the bridge actually assembled,
+      // preserving the requested calibration:test ratio (the honest
+      // small-dataset lane — the slice readout states the real sizes)
+      const requested = cfCalRows + cfTestRows;
+      const calTarget =
+        returned >= requested
+          ? cfCalRows
+          : Math.max(2, Math.floor((cfCalRows / requested) * returned));
+      const testTarget = Math.max(
+        1,
+        Math.min(cfTestRows, returned - calTarget),
+      );
+      let skipped = 0;
+      for (let i = 0; i < returned; i++) {
+        const row: number[] = [];
+        let numeric = true;
+        for (const column of featureColumns) {
+          const value = column.values[i];
+          if (typeof value === "number" && Number.isFinite(value)) {
+            row.push(value);
+          } else {
+            numeric = false;
+            break;
+          }
+        }
+        const label = targetColumn.values[i];
+        const labelOk = isRegression
+          ? typeof label === "number" && Number.isFinite(label)
+          : typeof label === "number" ||
+            (typeof label === "string" && label !== "");
+        if (!numeric || !labelOk) {
+          skipped += 1;
+          continue;
+        }
+        if (cal.length < calTarget) {
+          cal.push(row);
+          yCal.push(label as number);
+          calLabels.push(label as string | number);
+        } else if (test.length < testTarget) {
+          test.push(row);
+          yTest.push(label as number);
+          testLabels.push(label as string | number);
+          if (smilesColumnData !== null) {
+            const smile = smilesColumnData.values[i];
+            testSmiles.push(
+              typeof smile === "string" ? smile : String(smile ?? ""),
+            );
+          }
+        } else {
+          break;
+        }
+      }
+      if (cal.length < 2 || test.length < 1) {
+        throw new Error(
+          `the bounded column bridge assembled only ${cal.length} calibration rows and ${test.length} test rows (skipped ${skipped}) — lower the slice sizes or register a larger dataset`,
+        );
+      }
+      setCfSlice({
+        cal: cal.length,
+        test: test.length,
+        datasetRows,
+        skipped,
+        truncated,
+        smilesColumn,
+      });
+      if (selectedTrained.task === "regression") {
+        const result = await modelEvaluationApi.conformalRegression({
+          modelId: selectedTrained.model_id,
+          xCal: cal,
+          yCal,
+          xTest: test,
+          yTest,
+          alpha: cfAlpha,
+          groups: null,
+          smiles: smilesColumnData !== null ? testSmiles : null,
+        });
+        setCfRegResult(result);
+      } else {
+        const result = await modelEvaluationApi.conformalClassification({
+          modelId: selectedTrained.model_id,
+          xCal: cal,
+          yCal: calLabels,
+          xTest: test,
+          yTest: testLabels,
+          alpha: cfAlpha,
+          conditional: cfConditional,
+        });
+        setCfClsResult(result);
+      }
+    } catch (error) {
+      setCfError(describeError(error));
+    } finally {
+      setCfBusy(false);
+    }
+  }, [selectedTrained, cfCalRows, cfTestRows, cfAlpha, cfConditional, cfSmilesColumn, selected]);
+
+  // stage 12b: the family catalog fetch — the four paths' own honesty
+  // notes rendered beside the panel (fetched once per model selection)
+  useEffect(() => {
+    if (selectedTrained === null || cfCatalog !== null) {
+      return;
+    }
+    let cancelled = false;
+    modelEvaluationApi
+      .catalog()
+      .then((catalog) => {
+        if (!cancelled) {
+          setCfCatalog(catalog);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCfCatalogError(describeError(error));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTrained, cfCatalog]);
+
+  // stage 12b: the SMILES column default — the dataset's own first
+  // smiles-named column (the §15.4 detector's client-side echo; "" keeps
+  // the panel honest: no SMILES, no scaffold-coverage table)
+  useEffect(() => {
+    if (selected === null) {
+      return;
+    }
+    const candidate = selected.columns.find((name) =>
+      name.toLowerCase().includes("smiles"),
+    );
+    setCfSmilesColumn(candidate ?? "");
+  }, [selected]);
 
   // the shared digest-verified download lane (the artifacts client's
   // own raw lane — reused by the AD figure and the Export stage)
@@ -5627,6 +5863,368 @@ export function MLPage() {
                     artifactStatuses={exArtifactStatuses}
                     onDownload={(artifactId) => void handleExplainArtifactDownload(artifactId)}
                   />
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ML-1 — the conformal calibration panel: the finished
+            /model-evaluation family's frontend consumer. The
+            calibration slice rides the bounded column bridge (the AD
+            stage's own lane), the honest caveat renders beside it. */}
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Conformal calibration</CardTitle>
+            <CardDescription>
+              the distribution-free interval / label-set lane over the
+              selected trained model — the model-evaluation family&apos;s
+              conformal-regression and conformal-classification routes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {selectedTrained === null ? (
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Select a trained model in Evaluate or Compare — the
+                conformal lane calibrates that model&apos;s own intervals
+                or label sets over a bounded slice of its dataset.
+              </p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    alpha
+                    <input
+                      type="number"
+                      step={0.05}
+                      min={0.05}
+                      max={0.5}
+                      value={cfAlpha}
+                      aria-label="conformal alpha"
+                      onChange={(event) =>
+                        setCfAlpha(Number(event.target.value))
+                      }
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    calibration rows
+                    <input
+                      type="number"
+                      min={2}
+                      max={500}
+                      value={cfCalRows}
+                      aria-label="conformal calibration rows"
+                      onChange={(event) =>
+                        setCfCalRows(Number(event.target.value))
+                      }
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    test rows
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={cfTestRows}
+                      aria-label="conformal test rows"
+                      onChange={(event) =>
+                        setCfTestRows(Number(event.target.value))
+                      }
+                      className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    />
+                  </label>
+                  {selectedTrained.task === "regression" ? (
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      SMILES column (scaffold coverage)
+                      <select
+                        value={cfSmilesColumn}
+                        aria-label="conformal smiles column"
+                        onChange={(event) =>
+                          setCfSmilesColumn(event.target.value)
+                        }
+                        className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                      >
+                        <option value="">(none — no coverage table)</option>
+                        {(selected?.columns ?? []).map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="text-xs text-[var(--color-muted-foreground)]">
+                      conditional mode
+                      <select
+                        value={cfConditional}
+                        aria-label="conformal conditional mode"
+                        onChange={(event) =>
+                          setCfConditional(
+                            event.target.value as "split" | "label",
+                          )
+                        }
+                        className="mt-1 w-32 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] p-1 text-xs"
+                      >
+                        {(MODEL_EVALUATION_CONDITIONAL_LITERALS as readonly string[]).map(
+                          (mode) => (
+                            <option key={mode} value={mode}>
+                              {mode === "split"
+                                ? "split (marginal)"
+                                : "label (label-conditional)"}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={cfBusy}
+                    onClick={() => void handleConformalRun()}
+                  >
+                    {cfBusy ? "Calibrating…" : "Run the conformal calibration"}
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+                  The calibration and test slices ride the bounded column
+                  bridge over the model&apos;s own dataset (the AD
+                  stage&apos;s lane — the first N rows calibrate, the
+                  next M score). Honest caveat: when the model trained
+                  on the full frame these rows overlapped training — the
+                  finite-sample guarantee needs exchangeable held-out
+                  rows; train with a split carve (the Configure Split/CV
+                  stage) and calibrate on rows the model never saw.
+                  {cfCatalog !== null && cfCatalog.notes.length > 0
+                    ? ` ${cfCatalog.notes.join(" ")}`
+                    : ""}
+                </p>
+                {cfCatalogError !== null ? (
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    the family catalog could not be fetched:{" "}
+                    {cfCatalogError}
+                  </p>
+                ) : null}
+                {cfError !== null ? (
+                  <div className="mt-3">
+                    <ErrorBanner message={cfError} />
+                  </div>
+                ) : null}
+                {cfSlice !== null ? (
+                  <p className="mt-3 text-xs text-[var(--color-muted-foreground)]">
+                    slice assembled: {cfSlice.cal} calibration rows ·{" "}
+                    {cfSlice.test} test rows · skipped{" "}
+                    {cfSlice.skipped} non-numeric/label-less rows ·{" "}
+                    dataset {cfSlice.datasetRows} rows
+                    {cfSlice.truncated ? " (column fetches truncated)" : ""}
+                    {cfSlice.smilesColumn !== null
+                      ? ` · SMILES column "${cfSlice.smilesColumn}"`
+                      : ""}
+                  </p>
+                ) : null}
+                {cfRegResult !== null ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs text-[var(--color-foreground)]">
+                      split-conformal intervals — alpha {cfRegResult.alpha} ·
+                      radius {formatValue(cfRegResult.radius)} · mean width{" "}
+                      {formatValue(cfRegResult.mean_width)} ·{" "}
+                      {cfRegResult.n_calibration} calibration rows ·
+                      rank {cfRegResult.rank}
+                    </p>
+                    {cfRegResult.intervals !== null ? (
+                      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+                        <div className="max-h-56 overflow-auto">
+                          <table className="w-full border-collapse text-xs" aria-label="conformal interval rows">
+                            <thead className="sticky top-0 bg-[var(--color-muted)]">
+                              <tr>
+                                {["row", "prediction", "lower", "upper"].map((header) => (
+                                  <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cfRegResult.intervals.slice(0, 20).map((interval, i) => (
+                                <tr key={i} className="border-t border-[var(--color-border)]">
+                                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--color-foreground)]">test[{i}]</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{formatValue(interval.prediction)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{formatValue(interval.lower)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{formatValue(interval.upper)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                    {cfRegResult.intervals !== null &&
+                    cfRegResult.intervals.length > 20 ? (
+                      <p className="text-xs text-[var(--color-muted-foreground)]">
+                        first 20 of {cfRegResult.intervals.length} interval
+                        rows rendered
+                      </p>
+                    ) : null}
+                    {cfRegResult.empirical !== null ? (
+                      <p className="text-xs text-[var(--color-foreground)]">
+                        empirical coverage (never the guarantee):{" "}
+                        {cfRegResult.empirical.n_covered !== null
+                          ? `${cfRegResult.empirical.n_covered}/`
+                          : ""}
+                        {cfRegResult.empirical.n_test} covered
+                        {cfRegResult.empirical.coverage !== null
+                          ? ` · ${formatValue(cfRegResult.empirical.coverage * 100)}%`
+                          : ""}
+                      </p>
+                    ) : null}
+                    {cfRegResult.coverage_diagnostics !== null ? (
+                      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+                        <div className="max-h-56 overflow-auto">
+                          <table className="w-full border-collapse text-xs" aria-label="conformal coverage table">
+                            <thead className="sticky top-0 bg-[var(--color-muted)]">
+                              <tr>
+                                {["scaffold/group", "n_test", "n_covered", "coverage", "lower", "upper", "mean size"].map((header) => (
+                                  <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[
+                                cfRegResult.coverage_diagnostics.overall,
+                                ...cfRegResult.coverage_diagnostics.groups,
+                              ].map((row, i) => (
+                                <tr key={i} className={`border-t border-[var(--color-border)] ${i === 0 ? "bg-[var(--color-accent)]/40" : ""}`}>
+                                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--color-foreground)]">{String(row.group)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.n_test}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.n_covered}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.coverage === null ? "—" : formatValue(row.coverage)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.lower === null ? "—" : formatValue(row.lower)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.upper === null ? "—" : formatValue(row.upper)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.mean_size === null ? "—" : formatValue(row.mean_size)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {cfClsResult !== null ? (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-xs text-[var(--color-foreground)]">
+                      conformal label sets — alpha {cfClsResult.alpha} ·
+                      conditional {cfClsResult.conditional} ·{" "}
+                      {cfClsResult.n_calibration} calibration rows ·
+                      classes{" "}
+                      {cfClsResult.classes.map((c) => String(c)).join(" / ")}
+                      {cfClsResult.threshold !== null
+                        ? ` · threshold ${formatValue(cfClsResult.threshold)}`
+                        : ""}
+                    </p>
+                    {cfClsResult.class_thresholds !== null ? (
+                      <p className="text-xs text-[var(--color-muted-foreground)]">
+                        label-conditional thresholds:{" "}
+                        {Object.entries(cfClsResult.class_thresholds)
+                          .map(
+                            ([label, threshold]) =>
+                              `${label} = ${formatValue(threshold)}`,
+                          )
+                          .join(" · ")}
+                      </p>
+                    ) : null}
+                    {cfClsResult.sets !== null ? (
+                      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+                        <div className="max-h-56 overflow-auto">
+                          <table className="w-full border-collapse text-xs" aria-label="conformal label-set rows">
+                            <thead className="sticky top-0 bg-[var(--color-muted)]">
+                              <tr>
+                                {["row", "prediction_set", "set_size", "covered"].map((header) => (
+                                  <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cfClsResult.sets.slice(0, 20).map((setRow, i) => (
+                                <tr key={i} className="border-t border-[var(--color-border)]">
+                                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--color-foreground)]">test[{i}]</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                                    {setRow.prediction_set
+                                      .map((label) => String(label))
+                                      .join(" | ")}
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{setRow.set_size}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                                    {setRow.covered === null
+                                      ? "—"
+                                      : setRow.covered
+                                        ? "yes"
+                                        : "no"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                    {cfClsResult.sets !== null && cfClsResult.sets.length > 20 ? (
+                      <p className="text-xs text-[var(--color-muted-foreground)]">
+                        first 20 of {cfClsResult.sets.length} label-set rows
+                        rendered
+                      </p>
+                    ) : null}
+                    {cfClsResult.empirical !== null ? (
+                      <p className="text-xs text-[var(--color-foreground)]">
+                        empirical coverage (never the guarantee):{" "}
+                        {cfClsResult.empirical.n_covered !== null
+                          ? `${cfClsResult.empirical.n_covered}/`
+                          : ""}
+                        {cfClsResult.empirical.n_test} covered
+                        {cfClsResult.empirical.coverage !== null
+                          ? ` · ${formatValue(cfClsResult.empirical.coverage * 100)}%`
+                          : ""}{" "}
+                        · mean set size{" "}
+                        {formatValue(cfClsResult.empirical.mean_set_size)}
+                      </p>
+                    ) : null}
+                    {cfClsResult.per_class !== null ? (
+                      <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+                        <div className="max-h-56 overflow-auto">
+                          <table className="w-full border-collapse text-xs" aria-label="conformal per-class coverage table">
+                            <thead className="sticky top-0 bg-[var(--color-muted)]">
+                              <tr>
+                                {["class", "n_test", "n_covered", "coverage", "lower", "upper", "mean size"].map((header) => (
+                                  <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[
+                                cfClsResult.per_class.overall,
+                                ...cfClsResult.per_class.groups,
+                              ].map((row, i) => (
+                                <tr key={i} className={`border-t border-[var(--color-border)] ${i === 0 ? "bg-[var(--color-accent)]/40" : ""}`}>
+                                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--color-foreground)]">{String(row.group)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.n_test}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.n_covered}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.coverage === null ? "—" : formatValue(row.coverage)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.lower === null ? "—" : formatValue(row.lower)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.upper === null ? "—" : formatValue(row.upper)}</td>
+                                  <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">{row.mean_size === null ? "—" : formatValue(row.mean_size)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </>
             )}
