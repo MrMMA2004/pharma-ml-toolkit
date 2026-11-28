@@ -487,6 +487,121 @@ class TestGenerativeObjectives:
         assert "weights" in r.json()["detail"]
 
 
+class TestGenerativeMetrics:
+    """GEN-2 (the roadmap's row 5): POST /api/v1/generative/metrics over
+    the REAL moses_metrics.generation_metrics engine.
+
+    The Validate stage previously inferred validity from the descriptor
+    engine's parse alone; uniqueness / novelty / the internal
+    diversities / the property-shift table existed nowhere. These tests
+    pin the full audit: the duplicate collapse (uniqueness < 1), the
+    hand-computed novelty fixture, the honest not-measured lane without
+    a reference (the engine's own null, never a fake 1.0), the dataset
+    reference-column resolution, and the both-at-once refusal.
+    """
+
+    def _metrics(self, client, **payload) -> dict:
+        r = client.post(
+            "/api/v1/generative/metrics",
+            headers=auth_headers(),
+            json=payload,
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def test_duplicates_report_uniqueness_below_one(self, client):
+        audit = self._metrics(
+            client,
+            generated=["CCO", "CCO", "CCN", "CCO"],
+        )
+        assert audit["n_generated"] == 4
+        assert audit["n_valid"] == 4
+        assert audit["valid_fraction"] == 1.0
+        assert audit["n_unique"] == 2
+        assert audit["unique_fraction"] < 1.0
+        assert abs(audit["unique_fraction"] - 0.5) < 1e-12  # 2/4
+        # the duplicate collapse is what unique_fraction measures; the
+        # two surviving unique molecules (CCO vs CCN) carry one pairwise
+        # Tanimoto distance — the mean over that single pair
+        assert audit["internal_diversity_1"] > 0.0
+
+    def test_novelty_matches_the_hand_computed_fixture(self, client):
+        # generated {CCO, CCN, CCS}; reference {CCO, CCN} -> the novel
+        # set is {CCS}: n_novel == 1, novel_fraction == 1/3
+        audit = self._metrics(
+            client,
+            generated=["CCO", "CCN", "CCS"],
+            reference=["CCO", "CCN"],
+        )
+        assert audit["reference"] == {"source": "inline", "n": 2}
+        assert audit["n_unique"] == 3
+        assert audit["n_novel"] == 1
+        assert abs(audit["novel_fraction"] - 1.0 / 3.0) < 1e-12
+        # the property-shift table carries the reference means now
+        rows = audit["property_shifts"]
+        assert [row["property"] for row in rows] == [
+            "MW", "MolLogP", "TPSA", "QED",
+        ]
+        for row in rows:
+            assert row["reference_mean"] is not None
+            assert row["shift"] is not None
+
+    def test_no_reference_is_the_honest_not_measured(self, client):
+        audit = self._metrics(client, generated=["CCO", "CCN"])
+        assert audit["reference"] == {"source": None, "n": 0}
+        # the engine's own honest lane: novelty 0.0 (not a fake 1.0)
+        assert audit["n_novel"] == 0
+        assert audit["novel_fraction"] == 0.0
+        for row in audit["property_shifts"]:
+            assert row["reference_mean"] is None
+            assert row["shift"] is None
+
+    def test_the_dataset_reference_column_resolves(self, client):
+        import io
+
+        buf = io.StringIO()
+        buf.write("smiles,y\nCCO,1\nCCN,0\nCCS,1\nCCO,0\n")
+        upload = client.post(
+            "/api/v1/datasets",
+            headers=auth_headers(),
+            files={"file": ("ref.csv", buf.getvalue().encode(), "text/csv")},
+            data={"target": "y", "mode": "sync"},
+        )
+        assert upload.status_code == 200, upload.text
+        dataset_id = upload.json()["dataset"]["dataset_id"]
+        audit = self._metrics(
+            client,
+            generated=["CCO", "CCS"],
+            dataset_id=dataset_id,
+            column="smiles",
+        )
+        assert audit["reference"]["source"] == "dataset"
+        assert audit["reference"]["n"] == 4
+        # CCS is novel against the column's {CCO, CCN, CCS, CCO}
+        assert audit["n_novel"] == 0  # CCS is IN the reference
+
+    def test_reference_and_dataset_at_once_refused(self, client):
+        r = client.post(
+            "/api/v1/generative/metrics",
+            headers=auth_headers(),
+            json={
+                "generated": ["CCO"],
+                "reference": ["CCN"],
+                "dataset_id": "ds-unknown",
+            },
+        )
+        assert r.status_code == 422
+        assert "not both" in str(r.json()["detail"])
+
+    def test_empty_generated_is_an_honest_422(self, client):
+        r = client.post(
+            "/api/v1/generative/metrics",
+            headers=auth_headers(),
+            json={"generated": []},
+        )
+        assert r.status_code == 422
+
+
 class TestGenerativeOperatorModes:
     """GEN-1 (the roadmap's row 4): the operator modes reach the REAL
     engine through POST /api/v1/generative/optimize.

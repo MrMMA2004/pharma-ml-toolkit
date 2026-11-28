@@ -446,7 +446,7 @@ operator surfaces below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | GEN-2 — `POST /api/v1/generative/metrics` over `moses_metrics.generation_metrics` |
-| Current status | Partial (engine Implemented; route Missing; the Validate stage measures validity only) |
+| Current status | **Implemented (round 378, v1.2.250)** — the full MOSES-lite audit served (validity, uniqueness, novelty vs an inline or dataset reference, the internal diversities, the property-shift table, the honest not-measured nulls); the Validate stage renders the metrics card |
 | Problem | `src/pharmaml/generative/moses_metrics.py:470 generation_metrics` computes the MOSES suite — validity fraction, uniqueness, novelty vs a reference corpus, internal diversity, property means and shifts (`tests/test_generative.py`); `routes/generative.py` serves none of it. The page's Validate stage (`GenerativePage.tsx:2133`) infers validity from the descriptor engine's parse, and nothing anywhere computes uniqueness, novelty, or internal diversity. |
 | Proposed solution | Add `/generative/metrics` taking `{generated: [...], reference: [...] | dataset_id+column}`; the response is the full metrics dict + the property-shift table; the Validate stage gains the metrics card (validity confirmed against the parse verdict, uniqueness, novelty vs the user's reference corpus). |
 | Scientific value | Without novelty/internal-diversity a generator's "top 10" may be one scaffold printed ten ways — the exact failure mode the MOSES suite exists to catch. |
@@ -990,6 +990,23 @@ route-level scope of the gate test + the unchanged default lane) +
 generative-workspace mirror guard extended with the three new
 fields. The next row is GEN-2 (the MOSES generation metrics route
 over `moses_metrics.generation_metrics`).
+
+— execution log: **row 5 (GEN-2) executed in round 378 at v1.2.250** —
+the `POST /api/v1/generative/metrics` route over the real
+`moses_metrics.generation_metrics` engine (the full MOSES-lite audit:
+validity, uniqueness, novelty vs an inline-or-dataset reference with an
+existence bound never a size bound, IntDiv1/2, scaffold diversity, the
+property-shift table, the honest not-measured nulls — never a fake 1.0;
+the both-at-once reference refusal is an honest 422); the Validate
+stage's MOSES metrics card (the reference-corpus select, the five
+headline cells, the property-shift table, the pairwise-truncation
+flag, the honest "not measured (no reference)" lane); 6 API tests
+(the duplicate collapse + the hand-computed novelty fixture + the
+not-measured lane + the dataset column + the refusals) + 2 vitests +
+the generative-workspace mirror guard extended with the fourth
+request; the contract re-exported at 143 paths / 98 schemas. The next
+row is DS-2 (the Clean/Standardize stage's own route over a dataset
+SMILES column).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

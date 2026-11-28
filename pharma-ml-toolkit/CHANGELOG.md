@@ -1,3 +1,52 @@
+## [1.2.250] — 2026-11-29 — round 378 (the 171st recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — GEN-2, the P1 row 5, the MOSES generation-metrics route over moses_metrics.generation_metrics; trace 1a220a031331016d, item 3 of 3)
+
+- **GEN-2 (the roadmap's row 5 — the MOSES suite reachable from the
+  API)**: `POST /api/v1/generative/metrics` over the REAL
+  `moses_metrics.generation_metrics` engine — the full MOSES-lite
+  audit (validity, uniqueness, novelty vs a reference corpus, IntDiv1
+  / IntDiv2, scaffold diversity, the property-shift table) that
+  previously existed only in-tree: the Validate stage inferred
+  validity from the descriptor engine's parse alone and no uniqueness
+  / novelty / internal-diversity readout existed anywhere. The
+  request takes `{generated, reference | dataset_id + column}`; the
+  reference resolution is inline-list OR a dataset SMILES column
+  (an existence bound, never a size bound — a one-SMILES reference is
+  an honest novelty denominator); passing both at once is an honest
+  422. The response is the full metrics dict + the property-shift
+  rows + the reference provenance; without a reference the novelty
+  and the reference means are the engine's own honest nulls (0.0
+  "not measured" and NaN), never a fake 1.0.
+- **The frontend**: the Validate stage gains the MOSES metrics card —
+  the working set audited through the real engine: the reference-
+  corpus select (none / the inline starting molecules / the selected
+  dataset column), the five headline metric cells (validity,
+  uniqueness, novelty, IntDiv1, scaffold diversity), the property-
+  shift table, the pairwise-truncation honest flag, and the reference
+  provenance line; without a reference the novelty cell renders "not
+  measured (no reference)" and the reference-mean / shift columns
+  render the em dash. The client's `generativeApi.metrics` + the
+  strict `parseGenerationMetricsResult` (malformed throws, NaN stays
+  null); the wire body mirrors the backend's
+  `GenerationMetricsRequest` field-for-field (the generative-
+  workspace mirror guard extended with the fourth request).
+- **The evidence**: 6 new API tests (the duplicate collapse —
+  uniqueness 2/4 < 1 over a 4-molecule set with duplicates; the
+  hand-computed novelty fixture — {CCO, CCN, CCS} vs {CCO, CCN} →
+  n_novel 1, novel_fraction 1/3, the property rows carrying the
+  reference means; the honest not-measured lane without a reference;
+  the dataset reference-column resolution; the both-at-once 422; the
+  empty-generated 422), 2 new vitests over the full page mount (the
+  five headline cells + the honest nulls — "not measured (no
+  reference)", the em-dash columns, the none-supplied line; the
+  inline-reference lane — the request carries the stage-two corpus,
+  the measured novelty renders, the reference means fill the table),
+  the contract re-exported (143 paths / 98 schemas — the new
+  GenerationMetricsRequest DTO), the full suite 407/407 over 50
+  files, tsc 0, ruff clean, mypy clean on the touched route.
+- NO release (per the standing authorization rule): no tag, no
+  installer — v1.2.244 stands published; the tracked homes add the
+  250 zip alongside the 246–249 pairs.
+
 ## [1.2.249] — 2026-11-29 — round 377 (the 170th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — GEN-1, the P1 row 4, the GA's mutation/crossover operator modes reachable from the optimize route; trace 1a220a031331016d, item 2 of 3)
 
 - **GEN-1 (the roadmap's row 4 — the operator modes reach the REAL

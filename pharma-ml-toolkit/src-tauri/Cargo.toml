@@ -1,6 +1,6 @@
 [package]
 name = "pharmaml-studio"
-version = "1.2.249"  # version-carrier alignment (part20 §7.1): tauri.conf.json/VERSION/pyproject all ship 1.2.244; the crate version was left at 1.2.229 across the r229→r243 releases
+version = "1.2.250"  # version-carrier alignment (part20 §7.1): tauri.conf.json/VERSION/pyproject all ship 1.2.244; the crate version was left at 1.2.229 across the r229→r243 releases
 description = "The PharmaML Studio desktop host (Tauri 2): the offline WebView2 shell, the Python backend sidecar supervisor, and nothing else — no scientific logic lives in Rust (part11 §3)."
 authors = ["PharmaML contributors"]
 license = "MIT"

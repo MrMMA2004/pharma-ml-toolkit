@@ -1031,6 +1031,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/generative/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generation Metrics Route
+         * @description The MOSES-lite audit over a generated SMILES list.
+         *
+         *     The full metrics dict + the property-shift table; novelty and the
+         *     reference means are honest nulls without a reference (the engine's
+         *     own "not measured", never a fake 1.0).
+         */
+        post: operations["generation_metrics_route_api_v1_generative_metrics_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/generative/objectives": {
         parameters: {
             query?: never;
@@ -3683,6 +3707,17 @@ export interface components {
              * @default 0
              */
             weight_decay: number;
+        };
+        /** GenerationMetricsRequest */
+        GenerationMetricsRequest: {
+            /** Column */
+            column?: string | null;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Generated */
+            generated: string[];
+            /** Reference */
+            reference?: string[] | null;
         };
         /**
          * GnnGraphSpec
@@ -7375,6 +7410,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GanTrainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_metrics_route_api_v1_generative_metrics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationMetricsRequest"];
             };
         };
         responses: {

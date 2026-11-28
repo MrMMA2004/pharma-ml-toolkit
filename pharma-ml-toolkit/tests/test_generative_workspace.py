@@ -145,6 +145,8 @@ def test_generative_rest_surface_covered() -> None:
         "/api/v1/generative/rnn/train",
         "/api/v1/generative/rnn/sample",
         "/api/v1/generative/optimize",
+        # GEN-2 (r378, the roadmap's row 5): the MOSES metrics lane
+        "/api/v1/generative/metrics",
         "/api/v1/artifacts/figure",
         "/api/v1/visualization/table",
     ):
@@ -210,6 +212,20 @@ def test_sample_and_optimize_request_fields_mirror_the_backend() -> None:
         "seed", "top_n", "mode",
     }, "the backend OptimizeRequest changed shape (update this guard + the page)"
     assert _client_request_keys(client, "OptimizeRequest") == optimize_fields
+
+
+def test_generation_metrics_request_fields_mirror_the_backend() -> None:
+    """GEN-2 (r378): the metrics wire body == the backend's
+    `GenerationMetricsRequest` fields (the field-mirror rule)."""
+    client = _read(SERVICES / "generative" / "client.ts")
+    route_src = _route_module("generative.py")
+    backend_fields = _pydantic_fields(route_src, "GenerationMetricsRequest")
+    assert backend_fields == {
+        "generated", "reference", "dataset_id", "column",
+    }, "the backend GenerationMetricsRequest changed shape"
+    assert _client_request_keys(client, "GenerationMetricsRequest") == (
+        backend_fields
+    )
 
 
 def test_objective_catalog_fields_mirror_the_backend() -> None:

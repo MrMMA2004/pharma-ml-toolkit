@@ -2533,6 +2533,61 @@
         "title": "GanTrainRequest",
         "type": "object"
       },
+      "GenerationMetricsRequest": {
+        "properties": {
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "generated": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "minItems": 1,
+            "title": "Generated",
+            "type": "array"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 10000,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "required": [
+          "generated"
+        ],
+        "title": "GenerationMetricsRequest",
+        "type": "object"
+      },
       "GnnGraphSpec": {
         "description": "One graph: node features + the 2\u00d7E source\u2192destination endpoints.",
         "properties": {
@@ -8467,6 +8522,50 @@
           }
         },
         "summary": "Gan Train",
+        "tags": [
+          "generative"
+        ]
+      }
+    },
+    "/api/v1/generative/metrics": {
+      "post": {
+        "description": "The MOSES-lite audit over a generated SMILES list.\n\nThe full metrics dict + the property-shift table; novelty and the\nreference means are honest nulls without a reference (the engine's\nown \"not measured\", never a fake 1.0).",
+        "operationId": "generation_metrics_route_api_v1_generative_metrics_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationMetricsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Generation Metrics Route Api V1 Generative Metrics Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generation Metrics Route",
         "tags": [
           "generative"
         ]

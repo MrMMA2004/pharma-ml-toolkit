@@ -55,6 +55,7 @@ from pharmaml.exceptions import (
 from pharmaml.generative.diffusion import FeatureSpaceDiffusion
 from pharmaml.generative.gan import FeatureSpaceGAN
 from pharmaml.generative.genetic import GeneticOptimizer
+from pharmaml.generative.moses_metrics import generation_metrics
 from pharmaml.generative.rnn import SmilesRnn
 from pharmaml.generative.scoring import (
     LogPBandObjective,
@@ -600,6 +601,111 @@ def optimize(req: OptimizeRequest, request: Request) -> dict:
         manager=manager,
     )
     return {"mode": "job", "job": record.public()}
+
+
+# -- GEN-2 (the roadmap's row 5): the MOSES generation-metrics lane ----
+#
+# generation_metrics (moses_metrics.py) computes the full MOSES-lite
+# suite -- validity, uniqueness, novelty vs a reference corpus, the
+# internal diversities, scaffold diversity, the property-shift table --
+# and nothing anywhere served it: the Validate stage inferred validity
+# from the descriptor engine's parse alone and no uniqueness / novelty /
+# IntDiv readout existed. This route is the wiring.
+
+
+class GenerationMetricsRequest(BaseModel):
+    generated: list[str] = Field(min_length=1, max_length=5000)
+    reference: list[str] | None = Field(default=None, max_length=10000)
+    dataset_id: str | None = None
+    column: str | None = None
+
+
+def _resolve_reference(
+    request: Request, req: GenerationMetricsRequest
+) -> tuple[list[str] | None, dict[str, Any]]:
+    """The reference corpus: an inline list or a dataset SMILES column.
+
+    Unlike the prior-train corpus (>= 5), a reference set of even one
+    usable SMILES is an honest denominator for novelty -- the bound
+    here is existence, never size.
+    """
+    if req.reference is not None and len(req.reference) > 0:
+        if req.dataset_id is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="pass either reference or dataset_id, not both",
+            )
+        corpus = [s for s in req.reference if isinstance(s, str) and s.strip()]
+        if len(corpus) < 1:
+            raise HTTPException(
+                status_code=422,
+                detail="a reference corpus needs at least 1 SMILES string",
+            )
+        return corpus, {"source": "inline", "n": len(corpus)}
+    if req.dataset_id is not None:
+        dataset = request.app.state.dataset_store.get(req.dataset_id)
+        if dataset is None:
+            raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+        column = req.column or dataset.target
+        if column not in dataset.frame.columns:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"column {column!r} not in dataset "
+                    f"{req.dataset_id!r} "
+                    f"(columns: {[str(c) for c in dataset.frame.columns]})"
+                ),
+            )
+        series = dataset.frame[column].dropna()
+        corpus = [str(v) for v in series.tolist()]
+        if len(corpus) < 1:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"column {column!r} has no usable rows for a "
+                    "reference corpus"
+                ),
+            )
+        return corpus, {"source": "dataset", "n": len(corpus)}
+    return None, {"source": None, "n": 0}
+
+
+@router.post("/metrics")
+def generation_metrics_route(
+    req: GenerationMetricsRequest, request: Request
+) -> dict:
+    """The MOSES-lite audit over a generated SMILES list.
+
+    The full metrics dict + the property-shift table; novelty and the
+    reference means are honest nulls without a reference (the engine's
+    own "not measured", never a fake 1.0).
+    """
+    reference, reference_source = _resolve_reference(request, req)
+    try:
+        audit = generation_metrics(req.generated, reference)
+    except DataValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    shifts = audit.property_shifts.reset_index().rename(
+        columns={"index": "property"}
+    )
+    return {
+        "n_generated": audit.n_generated,
+        "n_valid": audit.n_valid,
+        "valid_fraction": audit.valid_fraction,
+        "n_unique": audit.n_unique,
+        "unique_fraction": audit.unique_fraction,
+        "n_novel": audit.n_novel,
+        "novel_fraction": audit.novel_fraction,
+        "internal_diversity_1": audit.internal_diversity_1,
+        "internal_diversity_2": audit.internal_diversity_2,
+        "scaffold_diversity": audit.scaffold_diversity,
+        "n_scaffolds": audit.n_scaffolds,
+        "pairwise_truncated": audit.pairwise_truncated,
+        "property_shifts": json_safe(
+            shifts.to_dict(orient="records")
+        ),
+        "reference": reference_source,
+    }
 
 
 # -- the feature-space GAN / Diffusion lanes (part18 §5.6, the API leg) ------

@@ -50,6 +50,7 @@ import type { components } from "@/types/api.d";
 type PriorTrainRequest = components["schemas"]["PriorTrainRequest"];
 type SampleRequest = components["schemas"]["SampleRequest"];
 type OptimizeRequest = components["schemas"]["OptimizeRequest"];
+type GenerationMetricsRequest = components["schemas"]["GenerationMetricsRequest"];
 type FigureRequest = components["schemas"]["FigureRequest"];
 type VisualizationTableRequest =
   components["schemas"]["VisualizationTableRequest"];
@@ -250,7 +251,143 @@ export interface TableExportOptions {
   readonly filename: string;
 }
 
+// ---------------------------------------------------------------------------
+// GEN-2 — the MOSES generation-metrics lane (the roadmap's row 5:
+// validity / uniqueness / novelty / the internal diversities + the
+// property-shift table over the engine's own audit)
+// ---------------------------------------------------------------------------
+
+/** One property-shift row (MW / MolLogP / TPSA / QED). */
+export interface PropertyShiftRow {
+  readonly property: string;
+  readonly generated_mean: number | null;
+  readonly reference_mean: number | null;
+  readonly shift: number | null;
+}
+
+/** `POST /api/v1/generative/metrics` — the MOSES-lite audit answer. */
+export interface GenerationMetricsResult {
+  readonly n_generated: number;
+  readonly n_valid: number;
+  readonly valid_fraction: number;
+  readonly n_unique: number;
+  readonly unique_fraction: number;
+  readonly n_novel: number;
+  readonly novel_fraction: number;
+  readonly internal_diversity_1: number;
+  readonly internal_diversity_2: number;
+  readonly scaffold_diversity: number;
+  readonly n_scaffolds: number;
+  readonly pairwise_truncated: boolean;
+  readonly property_shifts: readonly PropertyShiftRow[];
+  readonly reference: { readonly source: string | null; readonly n: number };
+}
+
+/** Narrow the metrics answer field-by-field (malformed throws, the
+ * honest nulls — the NaN reference means — stay null). */
+export function parseGenerationMetricsResult(
+  raw: unknown,
+  what: string,
+): GenerationMetricsResult {
+  const r = expectObject(raw, what);
+  const numeric: Array<keyof GenerationMetricsResult> = [
+    "n_generated",
+    "n_valid",
+    "valid_fraction",
+    "n_unique",
+    "unique_fraction",
+    "n_novel",
+    "novel_fraction",
+    "internal_diversity_1",
+    "internal_diversity_2",
+    "scaffold_diversity",
+    "n_scaffolds",
+  ];
+  const counts: Record<string, number | null> = {};
+  for (const key of numeric) {
+    const value = asNumber(r[key]);
+    if (value === null) {
+      throw new Error(`${what}: ${String(key)} is not a number`);
+    }
+    counts[key] = value;
+  }
+  const shiftsRaw = r["property_shifts"];
+  if (!Array.isArray(shiftsRaw)) {
+    throw new Error(`${what}: property_shifts is not an array`);
+  }
+  const propertyShifts: PropertyShiftRow[] = shiftsRaw.map((row, i) => {
+    const rr = expectObject(row, `${what} property_shifts[${i}]`);
+    const property = rr["property"];
+    if (typeof property !== "string") {
+      throw new Error(
+        `${what} property_shifts[${i}]: property is not a string`,
+      );
+    }
+    return {
+      property,
+      generated_mean: asNumber(rr["generated_mean"]),
+      reference_mean: asNumber(rr["reference_mean"]),
+      shift: asNumber(rr["shift"]),
+    };
+  });
+  const refRaw = r["reference"];
+  const ref = expectObject(refRaw, `${what} reference`);
+  const source = ref["source"];
+  if (source !== null && typeof source !== "string") {
+    throw new Error(`${what} reference.source is malformed`);
+  }
+  const n = asNumber(ref["n"]);
+  if (n === null) {
+    throw new Error(`${what} reference.n is not a number`);
+  }
+  return {
+    n_generated: Math.round(counts["n_generated"] ?? 0),
+    n_valid: Math.round(counts["n_valid"] ?? 0),
+    valid_fraction: counts["valid_fraction"] ?? 0,
+    n_unique: Math.round(counts["n_unique"] ?? 0),
+    unique_fraction: counts["unique_fraction"] ?? 0,
+    n_novel: Math.round(counts["n_novel"] ?? 0),
+    novel_fraction: counts["novel_fraction"] ?? 0,
+    internal_diversity_1: counts["internal_diversity_1"] ?? 0,
+    internal_diversity_2: counts["internal_diversity_2"] ?? 0,
+    scaffold_diversity: counts["scaffold_diversity"] ?? 0,
+    n_scaffolds: Math.round(counts["n_scaffolds"] ?? 0),
+    pairwise_truncated: r["pairwise_truncated"] === true,
+    property_shifts: propertyShifts,
+    reference: { source, n: Math.round(n) },
+  };
+}
+
+/** The metrics request payload (the wire shape the backend's
+ * `GenerationMetricsRequest` defines). */
+export interface MetricsOptions {
+  readonly generated: readonly string[];
+  readonly reference: readonly string[] | null;
+  readonly datasetId: string | null;
+  readonly column: string | null;
+}
+
 export const generativeApi = {
+  /**
+   * `POST /api/v1/generative/metrics` — the MOSES-lite audit over a
+   * generated SMILES list (GEN-2, the roadmap's row 5): the full
+   * metrics dict + the property-shift table, novelty an honest 0.0
+   * "not measured" without a reference (never a fake 1.0).
+   */
+  async metrics(options: MetricsOptions): Promise<GenerationMetricsResult> {
+    const request: GenerationMetricsRequest = {
+      generated: [...options.generated],
+      reference: options.reference === null ? null : [...options.reference],
+      dataset_id: options.datasetId,
+      column: options.column,
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/metrics",
+      request,
+    )) as Record<string, unknown>;
+    return parseGenerationMetricsResult(raw, "generative metrics result");
+  },
+
   /**
    * `GET /api/v1/generative/objectives` — the nine-objective scoring
    * catalog, each row the backend's own parameter schema.

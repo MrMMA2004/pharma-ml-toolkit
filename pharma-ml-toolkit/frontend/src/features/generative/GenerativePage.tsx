@@ -46,6 +46,7 @@ import {
   parseOptimizeResult,
   parsePriorTrainResult,
   parseTrainingMetricsPayload,
+  type GenerationMetricsResult,
   type ObjectiveCatalogEntry,
   type OptimizationView,
   type PriorView,
@@ -359,6 +360,13 @@ export function GenerativePage() {
   // the unified working set (both engines land here)
   const [workingSet, setWorkingSet] = useState<readonly WorkingRow[]>([]);
   const [workingSetLabel, setWorkingSetLabel] = useState<string>("");
+  // stage 5b: the GEN-2 MOSES metrics lane (the roadmap's row 5)
+  const [metricsReference, setMetricsReference] = useState<
+    "none" | "inline" | "dataset"
+  >("none");
+  const [metricsBusy, setMetricsBusy] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [metricsResult, setMetricsResult] = useState<GenerationMetricsResult | null>(null);
 
   // stage 5/6 — validate + properties (the REAL descriptor engine)
   const [descriptorJobId, setDescriptorJobId] = useState<string | null>(null);
@@ -873,6 +881,50 @@ export function GenerativePage() {
   }, [workingSet]);
 
   const blankCount = workingSet.length - descriptorRequest.length;
+
+  // stage 5b: the GEN-2 MOSES metrics lane — the working set audited
+  // through the REAL generation_metrics engine (validity confirmed
+  // against the parse verdict, uniqueness, novelty vs the user's
+  // reference corpus, the internal diversities, the property shifts)
+  const handleMetrics = useCallback(async () => {
+    if (workingSet.length === 0) {
+      return;
+    }
+    setMetricsBusy(true);
+    setMetricsError(null);
+    setMetricsResult(null);
+    try {
+      const reference =
+        metricsReference === "inline"
+          ? inlineCorpus.slice(0, 200)
+          : null;
+      const datasetId =
+        metricsReference === "dataset" ? selectedDatasetId : null;
+      const column =
+        metricsReference === "dataset" ? selectedColumn : null;
+      if (metricsReference === "inline" && reference !== null && reference.length < 1) {
+        throw new Error(
+          "the inline reference corpus is empty — paste SMILES in the Define Starting Molecules stage",
+        );
+      }
+      if (metricsReference === "dataset" && datasetId === null) {
+        throw new Error(
+          "no dataset selected — pick one in the Define Starting Molecules stage",
+        );
+      }
+      const result = await generativeApi.metrics({
+        generated: workingSet.map((row) => row.smiles),
+        reference,
+        datasetId,
+        column,
+      });
+      setMetricsResult(result);
+    } catch (error) {
+      setMetricsError(describeError(error));
+    } finally {
+      setMetricsBusy(false);
+    }
+  }, [workingSet, metricsReference, inlineCorpus, selectedDatasetId, selectedColumn]);
 
   const handleValidate = useCallback(async () => {
     if (workingSet.length === 0) {
@@ -2299,6 +2351,162 @@ export function GenerativePage() {
             above (needs a working set from Generate).
           </p>
         )}
+
+        {/* GEN-2 — the MOSES metrics card: the working set audited
+            through the REAL generation_metrics engine (validity
+            confirmed against the parse verdict, uniqueness, novelty vs
+            the user's reference corpus, the internal diversities, the
+            property shifts). Without a reference the novelty and the
+            reference means render as honest "not measured", never a
+            fake 1.0. */}
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">
+              MOSES generation metrics
+            </CardTitle>
+            <CardDescription>
+              the full MOSES-lite audit over the working set — POST
+              /api/v1/generative/metrics over the real engine
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-xs">
+                reference corpus
+                <select
+                  value={metricsReference}
+                  aria-label="metrics reference source"
+                  onChange={(event) =>
+                    setMetricsReference(
+                      event.target.value as "none" | "inline" | "dataset",
+                    )
+                  }
+                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm"
+                >
+                  <option value="none">none (novelty not measured)</option>
+                  <option value="inline">
+                    the inline starting molecules ({inlineCorpus.length})
+                  </option>
+                  <option value="dataset">
+                    the selected dataset column
+                  </option>
+                </select>
+              </label>
+              <Button
+                onClick={() => void handleMetrics()}
+                disabled={metricsBusy || workingSet.length === 0}
+              >
+                {metricsBusy ? "auditing…" : "Compute MOSES metrics"}
+              </Button>
+              <span className="text-xs text-[var(--color-muted-foreground)]">
+                {workingSet.length} molecules in the working set
+                {workingSetLabel !== "" ? ` (${workingSetLabel})` : ""}
+              </span>
+            </div>
+            {metricsError !== null ? (
+              <div className="mt-3">
+                <ErrorBanner message={metricsError} />
+              </div>
+            ) : null}
+            {metricsResult !== null ? (
+              <div className="mt-4 space-y-3">
+                <div
+                  className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-5"
+                  aria-label="moses headline metrics"
+                >
+                  {[
+                    {
+                      label: "validity",
+                      value: `${(metricsResult.valid_fraction * 100).toFixed(1)}% (${metricsResult.n_valid}/${metricsResult.n_generated})`,
+                    },
+                    {
+                      label: "uniqueness",
+                      value: `${(metricsResult.unique_fraction * 100).toFixed(1)}% (${metricsResult.n_unique}/${metricsResult.n_valid})`,
+                    },
+                    {
+                      label: "novelty",
+                      value:
+                        metricsResult.reference.source === null
+                          ? "not measured (no reference)"
+                          : `${(metricsResult.novel_fraction * 100).toFixed(1)}% (${metricsResult.n_novel}/${metricsResult.n_unique})`,
+                    },
+                    {
+                      label: "IntDiv1",
+                      value: metricsResult.internal_diversity_1.toFixed(3),
+                    },
+                    {
+                      label: "scaffold diversity",
+                      value: `${metricsResult.scaffold_diversity.toFixed(3)} (${metricsResult.n_scaffolds} scaffolds)`,
+                    },
+                  ].map((cell) => (
+                    <div
+                      key={cell.label}
+                      className="rounded-md border border-[var(--color-border)] px-3 py-2"
+                    >
+                      <span className="block text-[10px] uppercase tracking-wide text-[var(--color-muted-foreground)]">
+                        {cell.label}
+                      </span>
+                      <span className="block font-mono text-[var(--color-foreground)]">
+                        {cell.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {metricsResult.pairwise_truncated ? (
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    the IntDiv loops ran on the first 2000 canonical-sorted
+                    unique molecules (the engine&apos;s own deterministic
+                    head, flagged honestly)
+                  </p>
+                ) : null}
+                <div className="overflow-hidden rounded-lg border border-[var(--color-border)]">
+                  <div className="max-h-48 overflow-auto">
+                    <table className="w-full border-collapse text-xs" aria-label="moses property shifts">
+                      <thead className="sticky top-0 bg-[var(--color-muted)]">
+                        <tr>
+                          {["property", "generated mean", "reference mean", "shift"].map((header) => (
+                            <th key={header} scope="col" className="whitespace-nowrap px-3 py-2 text-left font-semibold text-[var(--color-foreground)]">
+                              {header}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {metricsResult.property_shifts.map((row) => (
+                          <tr key={row.property} className="border-t border-[var(--color-border)]">
+                            <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--color-foreground)]">{row.property}</td>
+                            <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                              {row.generated_mean === null ? "—" : row.generated_mean.toFixed(3)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                              {row.reference_mean === null ? "—" : row.reference_mean.toFixed(3)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                              {row.shift === null ? "—" : row.shift.toFixed(3)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <p className="text-xs text-[var(--color-muted-foreground)]">
+                  the reference:{" "}
+                  {metricsResult.reference.source === null
+                    ? "none supplied — novelty and the reference means are honestly not measured (the engine's own null, never a fake 1.0)"
+                    : `${metricsResult.reference.source} (${metricsResult.reference.n} SMILES)`}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--color-muted-foreground)]">
+                The metrics card rides the working set from Generate —
+                validity confirmed against the parse verdict, uniqueness,
+                novelty vs your reference corpus, the internal diversity
+                and the property-shift table.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </StageHeader>
 
       <StageHeader

@@ -6,4 +6,4 @@
  * tree-wide; the r346 drift guard pins this file to both).
  */
 
-export const APP_VERSION = "1.2.249";
+export const APP_VERSION = "1.2.250";
