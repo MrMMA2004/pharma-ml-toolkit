@@ -220,10 +220,27 @@ export interface OptimizeOptions {
   readonly elitism: number;
   readonly tournamentK: number;
   readonly maxSmilesLength: number;
+  /** GEN-1: the operator modes the GA engine validates (the literals
+   * the generated OptimizeRequest schema carries). */
+  readonly mutationMode: "uniform" | "scaffold" | "topology" | "bioisostere";
+  readonly crossoverMode: "splice" | "scaffold_hop";
+  /** the scaffold-hop child gate (1 = off — the engine's own default). */
+  readonly minHeavyAtoms: number;
   readonly seed: number;
   readonly topN: number;
   readonly mode?: "job" | "sync";
 }
+
+/** The engine's mutation-mode vocabulary (the route Literal's own set). */
+export const GA_MUTATION_LITERALS = [
+  "uniform",
+  "scaffold",
+  "topology",
+  "bioisostere",
+] as const;
+
+/** The engine's crossover-mode vocabulary (the route Literal's own set). */
+export const GA_CROSSOVER_LITERALS = ["splice", "scaffold_hop"] as const;
 
 export interface TableExportOptions {
   /** The ranked/filtered rows the export carries. */
@@ -353,6 +370,9 @@ export const generativeApi = {
       elitism: options.elitism,
       tournament_k: options.tournamentK,
       max_smiles_length: options.maxSmilesLength,
+      mutation: options.mutationMode,
+      crossover: options.crossoverMode,
+      min_heavy_atoms: options.minHeavyAtoms,
       seed: options.seed,
       top_n: options.topN,
       mode: options.mode ?? "job",

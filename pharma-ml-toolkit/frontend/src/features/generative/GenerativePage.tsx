@@ -39,6 +39,8 @@ import {
 import { getEventStream } from "@/services/websocket/client";
 import {
   OBJECTIVE_KINDS,
+  GA_CROSSOVER_LITERALS,
+  GA_MUTATION_LITERALS,
   generativeApi,
   parseIterationUpdatePayload,
   parseOptimizeResult,
@@ -295,6 +297,15 @@ export function GenerativePage() {
   const [elitism, setElitism] = useState(4);
   const [tournamentK, setTournamentK] = useState(3);
   const [maxSmilesLength, setMaxSmilesLength] = useState(120);
+  // GEN-1: the operator modes (the engine's own vocabulary) + the
+  // scaffold-hop child gate
+  const [gaMutationMode, setGaMutationMode] = useState<
+    "uniform" | "scaffold" | "topology" | "bioisostere"
+  >("uniform");
+  const [gaCrossoverMode, setGaCrossoverMode] = useState<
+    "splice" | "scaffold_hop"
+  >("splice");
+  const [gaMinHeavyAtoms, setGaMinHeavyAtoms] = useState(1);
   const [gaSeed, setGaSeed] = useState(42);
   const [topN, setTopN] = useState(10);
 
@@ -755,6 +766,9 @@ export function GenerativePage() {
         elitism,
         tournamentK,
         maxSmilesLength,
+        mutationMode: gaMutationMode,
+        crossoverMode: gaCrossoverMode,
+        minHeavyAtoms: gaMinHeavyAtoms,
         seed: gaSeed,
         topN,
       });
@@ -782,7 +796,8 @@ export function GenerativePage() {
   }, [
     objectiveSpec, corpusSource, inlineCorpus, selectedDatasetId,
     selectedColumn, populationSize, generations, mutationRate,
-    crossoverRate, elitism, tournamentK, maxSmilesLength, gaSeed, topN,
+    crossoverRate, elitism, tournamentK, maxSmilesLength, gaMutationMode,
+    gaCrossoverMode, gaMinHeavyAtoms, gaSeed, topN,
   ]);
 
   const handleOptimizeResult = useCallback((result: unknown) => {
@@ -1819,6 +1834,72 @@ export function GenerativePage() {
                       className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm"
                     />
                   </label>
+                  <label className="flex flex-col gap-1">
+                    mutation mode
+                    <select
+                      value={gaMutationMode}
+                      aria-label="ga mutation mode"
+                      onChange={(event) =>
+                        setGaMutationMode(
+                          event.target.value as
+                            | "uniform"
+                            | "scaffold"
+                            | "topology"
+                            | "bioisostere",
+                        )
+                      }
+                      className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm"
+                    >
+                      {(GA_MUTATION_LITERALS as readonly string[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {mode === "uniform"
+                            ? "uniform (character moves)"
+                            : mode === "scaffold"
+                              ? "scaffold (decoration resampling)"
+                              : mode === "topology"
+                                ? "topology (ring-size moves)"
+                                : "bioisostere (matched pairs)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    crossover mode
+                    <select
+                      value={gaCrossoverMode}
+                      aria-label="ga crossover mode"
+                      onChange={(event) =>
+                        setGaCrossoverMode(
+                          event.target.value as "splice" | "scaffold_hop",
+                        )
+                      }
+                      className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm"
+                    >
+                      {(GA_CROSSOVER_LITERALS as readonly string[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {mode === "splice"
+                            ? "splice (single-point)"
+                            : "scaffold_hop (BREED-style hop)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {gaCrossoverMode === "scaffold_hop" ? (
+                    <label className="flex flex-col gap-1">
+                      min heavy atoms (the child gate)
+                      <input
+                        type="number"
+                        min={1}
+                        max={500}
+                        value={gaMinHeavyAtoms}
+                        aria-label="ga min heavy atoms"
+                        onChange={(event) =>
+                          setGaMinHeavyAtoms(Number(event.target.value))
+                        }
+                        className="rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-sm"
+                      />
+                    </label>
+                  ) : null}
                   <label className="flex flex-col gap-1">
                     tournament k (2–16)
                     <input

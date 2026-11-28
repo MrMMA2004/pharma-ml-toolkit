@@ -1,3 +1,50 @@
+## [1.2.249] — 2026-11-29 — round 377 (the 170th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — GEN-1, the P1 row 4, the GA's mutation/crossover operator modes reachable from the optimize route; trace 1a220a031331016d, item 2 of 3)
+
+- **GEN-1 (the roadmap's row 4 — the operator modes reach the REAL
+  engine through the API)**: `OptimizeRequest` gains the operator-mode
+  fields the engine has validated since part19 — `mutation: Literal
+  ["uniform" | "scaffold" | "topology" | "bioisostere"]` (the
+  structural mutation family: character moves, scaffold decoration
+  resampling, ring-topology geometry moves, bioisostere matched
+  pairs) and `crossover: Literal["splice" | "scaffold_hop"]` (plain
+  single-point splice vs the BREED-style linker excision/splicing
+  hop), plus `min_heavy_atoms` (the scaffold-hop child gate, 1 =
+  off — the engine's own default). The route forwards the three
+  verbatim into `GeneticOptimizer` through `ga_kwargs` (the engine's
+  own `__init__` validation is the guard; the unknown-literal 422
+  is pydantic's own). The default lane (`uniform` / `splice` / gate
+  off) is byte-identical.
+- **The frontend**: the Configure stage's Evolution parameters card
+  gains the two selects over the engine's own vocabulary (the
+  option labels carry the engine's own descriptions — "uniform
+  (character moves)", "scaffold (decoration resampling)", "topology
+  (ring-size moves)", "bioisostere (matched pairs)", "splice
+  (single-point)", "scaffold_hop (BREED-style hop)") + the
+  conditional min-heavy-atoms gate input (visible for the
+  scaffold-hop crossover only). The client's `OptimizeOptions`
+  gains `mutationMode` / `crossoverMode` / `minHeavyAtoms`; the wire
+  body mirrors the backend's request field-for-field (the
+  generative-workspace mirror guard extended with the three new
+  fields). The generated contract re-exported (142 paths / 98
+  schemas — the OptimizeRequest schema carries the new literals).
+- **The evidence**: 4 new API tests (the corpus-free fixture —
+  population == the four ring parents so no DEFAULT_CORPUS member
+  enters the produced set — pins the metadata echo `mutation ==
+  "scaffold"` / `crossover == "scaffold_hop"` as the fail-first
+  wiring proof, the hopped-Murcko evidence, the honest route-level
+  scope of the gate test with the engine-scope comment, the
+  unknown-literal 422s, the unchanged default lane), 2 new vitests
+  (the select passthrough — the full page mount, the option labels
+  over the engine's vocabulary, the conditional gate input, the
+  request carrying `mutationMode: "topology"` /
+  `crossoverMode: "scaffold_hop"` / `minHeavyAtoms: 12` verbatim +
+  the default lane `uniform`/`splice`/1), the generative-workspace
+  mirror guard extended, the full suite 405/405 over 49 files,
+  tsc 0, ruff clean, mypy clean on the touched route.
+- NO release (per the standing authorization rule): no tag, no
+  installer — v1.2.244 stands published; the tracked homes add the
+  249 zip alongside the 246/247/248 pairs.
+
 ## [1.2.248] — 2026-11-29 — round 376 (the 169th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — ML-1, the P1 row 3, the model-evaluation family's frontend consumer; trace 1a220a031331016d)
 
 - **ML-1 (the roadmap's row 3 — the four finished model-evaluation

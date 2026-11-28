@@ -4012,6 +4012,12 @@ export interface components {
             /** Column */
             column?: string | null;
             /**
+             * Crossover
+             * @default splice
+             * @enum {string}
+             */
+            crossover: "splice" | "scaffold_hop";
+            /**
              * Crossover Rate
              * @default 0.7
              */
@@ -4034,11 +4040,22 @@ export interface components {
              */
             max_smiles_length: number;
             /**
+             * Min Heavy Atoms
+             * @default 1
+             */
+            min_heavy_atoms: number;
+            /**
              * Mode
              * @default job
              * @enum {string}
              */
             mode: "job" | "sync";
+            /**
+             * Mutation
+             * @default uniform
+             * @enum {string}
+             */
+            mutation: "uniform" | "scaffold" | "topology" | "bioisostere";
             /**
              * Mutation Rate
              * @default 0.08

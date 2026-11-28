@@ -269,6 +269,18 @@ class OptimizeRequest(BaseModel):
     elitism: int = Field(default=4, ge=0, le=64)
     tournament_k: int = Field(default=3, ge=2, le=16)
     max_smiles_length: int = Field(default=120, ge=20, le=256)
+    # GEN-1 (the roadmap's row 4): the operator modes the engine has
+    # validated since part19 — mutation's structural family (uniform
+    # character moves, scaffold decoration resampling, ring-topology
+    # geometry, bioisostere pairs) and the crossover family (plain
+    # splice vs BREED-style scaffold_hop linker excision/splicing),
+    # plus the scaffold-hop child gate (min_heavy_atoms, 1 = off) —
+    # forwarded verbatim into GeneticOptimizer.
+    mutation: Literal[
+        "uniform", "scaffold", "topology", "bioisostere"
+    ] = "uniform"
+    crossover: Literal["splice", "scaffold_hop"] = "splice"
+    min_heavy_atoms: int = Field(default=1, ge=1, le=500)
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     top_n: int = Field(default=10, ge=1, le=50)
     mode: Literal["job", "sync"] = "job"
@@ -555,6 +567,11 @@ def optimize(req: OptimizeRequest, request: Request) -> dict:
         "elitism": req.elitism,
         "tournament_k": req.tournament_k,
         "max_smiles_length": req.max_smiles_length,
+        # the GEN-1 operator modes, verbatim into the optimizer (the
+        # engine's own __init__ validation is the guard)
+        "mutation": req.mutation,
+        "crossover": req.crossover,
+        "min_heavy_atoms": req.min_heavy_atoms,
         "seed": req.seed,
     }
     if req.mode == "sync":

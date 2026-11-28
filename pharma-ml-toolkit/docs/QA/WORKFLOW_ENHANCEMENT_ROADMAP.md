@@ -428,7 +428,7 @@ operator surfaces below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | GEN-1 — Expose `mutation` / `crossover` modes on `POST /api/v1/generative/optimize` |
-| Current status | Partial (engine Implemented; route drops the mode kwargs) |
+| Current status | **Implemented (round 377, v1.2.249)** — the mutation/crossover Literals + the `min_heavy_atoms` child gate ride `OptimizeRequest` and forward verbatim into `GeneticOptimizer`; the Configure stage carries the two selects + the conditional gate input |
 | Problem | `generative/genetic.py` accepts `mutation="smiles"|"topology"|"bioisostere"` and crossover modes including `"scaffold_hop"` (BREED-style linker excision/splicing over `scaffold_hop_crossover`, `bioisostere_mutate`, `ring_topology_mutate` — wired in at `genetic.py:131-140`), but `routes/generative.py:550` builds `ga_kwargs` from exactly eight numeric knobs (`population_size, generations, mutation_rate, crossover_rate, elitism, tournament_k, max_smiles_length, seed`) — the operator modes are unreachable from the API and the page's Configure stage. |
 | Proposed solution | Add `mutation: Literal[...]` and `crossover: Literal[...]` (+ the mode-specific rates the engine already validates) to `OptimizeRequest`; forward verbatim into `GeneticOptimizer`. The page's Constraints/Configure stage gains the two selects with the engine's own descriptions. |
 | Scientific value | Scaffold-hop crossover and bioisostere mutation are the moves that actually explore chemotypes — plain SMILES-point mutation alone converges to the seed's neighborhood. |
@@ -972,6 +972,24 @@ diagnostics-version guard (frontend/src/lib/version.ts stuck at
 1.2.246 across the r375 bump) trued in the 1.2.248 lockstep. The next
 row is GEN-1 (the mutation/crossover operator modes on the
 generative optimize route).
+
+— execution log: **row 4 (GEN-1) executed in round 377 at v1.2.249** — the
+`mutation`/`crossover` Literals (the engine's own vocabulary:
+uniform/scaffold/topology/bioisostere + splice/scaffold_hop) + the
+`min_heavy_atoms` child gate on `OptimizeRequest`, forwarded verbatim
+into `GeneticOptimizer` through `ga_kwargs` (the engine's own init
+validation is the guard, the unknown-literal 422 is pydantic's own);
+the Configure stage's Evolution parameters card gains the two selects
+(the engine's own descriptions as the option labels) + the
+conditional gate input; the contract re-exported (142 paths / 98
+schemas — the OptimizeRequest schema carries the new literals); 4
+API tests over the corpus-free fixture (the metadata echo as the
+fail-first wiring proof + the hopped-Murcko evidence + the honest
+route-level scope of the gate test + the unchanged default lane) +
+2 vitests (the select passthrough + the default lane) + the
+generative-workspace mirror guard extended with the three new
+fields. The next row is GEN-2 (the MOSES generation metrics route
+over `moses_metrics.generation_metrics`).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

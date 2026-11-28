@@ -487,6 +487,147 @@ class TestGenerativeObjectives:
         assert "weights" in r.json()["detail"]
 
 
+class TestGenerativeOperatorModes:
+    """GEN-1 (the roadmap's row 4): the operator modes reach the REAL
+    engine through POST /api/v1/generative/optimize.
+
+    The route previously built ga_kwargs from exactly eight numeric
+    knobs -- the mutation/crossover operator families the engine has
+    validated since part19 were unreachable from the API. The fixture
+    is CORPUS-FREE (population_size == len(seed_smiles), so the
+    engine seeds the population from exactly the parents and never
+    draws DEFAULT_CORPUS members): with mutation="scaffold" (every
+    mutant preserves the parent's Murcko framework) the ONLY source
+    of a framework change is the scaffold_hop crossover -- the
+    Murcko assertion below is therefore fail-first against the route
+    dropping the kwargs (the engine's own metadata echo answers
+    "uniform"/"splice" and no hopped molecule can exist).
+    """
+
+    PARENTS = [
+        "CC(=O)Oc1ccccc1C(=O)O",   # aspirin  (benzene framework)
+        "COc1ccccc1",               # anisole  (benzene framework)
+        "CN1CCCCC1c2cccnc2",        # nicotine (bicyclic framework)
+        "c1ccncc1",                 # pyridine (its own framework)
+    ]
+
+    def _murcko(self, smiles: str) -> str:
+        from rdkit import Chem
+        from rdkit.Chem.Scaffolds import MurckoScaffold
+
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            return ""
+        return Chem.MolToSmiles(MurckoScaffold.GetScaffoldForMol(mol))
+
+    def _parent_frameworks(self) -> set[str]:
+        return {self._murcko(s) for s in self.PARENTS}
+
+    def _hop(self, client, **extra) -> dict:
+        r = client.post(
+            "/api/v1/generative/optimize",
+            headers=auth_headers(),
+            json={
+                "objective": {"kind": "qed"},
+                "seed_smiles": self.PARENTS,
+                "population_size": 4,
+                "generations": 8,
+                "elitism": 1,
+                "tournament_k": 2,
+                "crossover_rate": 1.0,
+                "mutation": "scaffold",
+                "crossover": "scaffold_hop",
+                "top_n": 50,
+                "mode": "sync",
+                **extra,
+            },
+        )
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def _produced(self, payload: dict) -> list[str]:
+        opt = payload["optimization"]
+        out = [row["smiles"] for row in opt["top"]]
+        out.append(opt["best"])
+        for record in opt["history"]:
+            out.append(record["best_smiles"])
+        return [s for s in out if s]
+
+    def test_scaffold_hop_reaches_the_evolution_and_hops(self, client):
+        payload = self._hop(client)
+        opt = payload["optimization"]
+        meta = opt["metadata"]
+        # THE wiring proof (fail-first: the route drops the kwargs ->
+        # the engine's own defaults answer "uniform"/"splice" and
+        # these two asserts fail immediately)
+        assert meta["mutation"] == "scaffold"
+        assert meta["crossover"] == "scaffold_hop"
+        # the hop's effect evidenced in the produced set: at least one
+        # molecule's Murcko framework differs from EVERY parent's
+        # framework (supplementary evidence -- the character-mutation
+        # fallback can in principle also change a framework, so the
+        # metadata echo above is the fail-first leg of the pair)
+        parents = self._parent_frameworks()
+        hopped = [
+            smi for smi in self._produced(payload)
+            if self._murcko(smi) not in parents
+        ]
+        assert hopped, (
+            "no scaffold-hop child surfaced in the produced set -- the "
+            "operator mode did not ride the evolution"
+        )
+
+    def test_the_min_heavy_atoms_gate_rides_the_hop(self, client):
+        # the route-level scope: the field rides the request (a 200
+        # run -- an unknown value would 422) and reaches the engine
+        # (the metadata echo); the gate's own per-child semantics is
+        # the ENGINE's tested contract (tests/test_generative.py's
+        # TestScaffoldHop, round 100x-53). A per-child route-level
+        # assertion is NOT honest here: the mutation family's
+        # character fallback carries no gate, so a framework-changed
+        # molecule under a high gate is not proof of a leak.
+        payload = self._hop(client, min_heavy_atoms=10)
+        opt = payload["optimization"]
+        assert opt["metadata"]["crossover"] == "scaffold_hop"
+        assert opt["generations"] == 8  # the run completed
+        produced = self._produced(payload)
+        assert produced  # the evolution produced molecules
+
+    def test_unknown_operator_modes_are_honest_422s(self, client):
+        for field, bad in (("mutation", "teleport"), ("crossover", "hop")):
+            r = client.post(
+                "/api/v1/generative/optimize",
+                headers=auth_headers(),
+                json={
+                    "objective": {"kind": "qed"},
+                    "seed_smiles": ["CCO", "CCN", "CCC"],
+                    "population_size": 8,
+                    "generations": 2,
+                    field: bad,
+                    "mode": "sync",
+                },
+            )
+            assert r.status_code == 422, (field, r.text)
+            assert bad in str(r.json()["detail"])
+
+    def test_the_default_lane_is_unchanged(self, client):
+        r = client.post(
+            "/api/v1/generative/optimize",
+            headers=auth_headers(),
+            json={
+                "objective": {"kind": "qed"},
+                "seed_smiles": ["CCO", "CCN", "CCC"],
+                "population_size": 8,
+                "generations": 2,
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        meta = r.json()["optimization"]["metadata"]
+        assert meta["mutation"] == "uniform"
+        assert meta["crossover"] == "splice"
+
+
 class TestGenerativePrior:
     def _train(self, client, mode: str = "sync", **extra) -> dict:
         r = client.post(

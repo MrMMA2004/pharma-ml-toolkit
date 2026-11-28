@@ -3315,6 +3315,15 @@
             ],
             "title": "Column"
           },
+          "crossover": {
+            "default": "splice",
+            "enum": [
+              "splice",
+              "scaffold_hop"
+            ],
+            "title": "Crossover",
+            "type": "string"
+          },
           "crossover_rate": {
             "default": 0.7,
             "maximum": 1.0,
@@ -3354,6 +3363,13 @@
             "title": "Max Smiles Length",
             "type": "integer"
           },
+          "min_heavy_atoms": {
+            "default": 1,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Min Heavy Atoms",
+            "type": "integer"
+          },
           "mode": {
             "default": "job",
             "enum": [
@@ -3361,6 +3377,17 @@
               "sync"
             ],
             "title": "Mode",
+            "type": "string"
+          },
+          "mutation": {
+            "default": "uniform",
+            "enum": [
+              "uniform",
+              "scaffold",
+              "topology",
+              "bioisostere"
+            ],
+            "title": "Mutation",
             "type": "string"
           },
           "mutation_rate": {

@@ -204,6 +204,9 @@ def test_sample_and_optimize_request_fields_mirror_the_backend() -> None:
         "objective", "seed_smiles", "dataset_id", "column",
         "population_size", "generations", "mutation_rate",
         "crossover_rate", "elitism", "tournament_k", "max_smiles_length",
+        # GEN-1 (r377, the roadmap's row 4): the operator modes + the
+        # scaffold-hop child gate
+        "mutation", "crossover", "min_heavy_atoms",
         "seed", "top_n", "mode",
     }, "the backend OptimizeRequest changed shape (update this guard + the page)"
     assert _client_request_keys(client, "OptimizeRequest") == optimize_fields
