@@ -947,7 +947,7 @@ engine before the fit (the estimator sees the carved train side only —
 `shared_groups` leakage verdict in the response and the §15.2 run record's
 `cross_validation.split` at BOTH exits (the refused carve records its echoed
 config + error, the fit failure records the computed carve), the Configure
-Split/CV selector ("none" keeps the legacy full-frame lane request-free) +
+Split/CV selector ("none" keeps the legacy lane — the request carries the explicit `split: null`, the pydantic-equal default) +
 the group-column gate + the carve readout with the honest-cv caveat line; 9
 API tests + 14 drift-guard tests (the guard extended to the train lane) +
 7 parser vitests + 3 page vitests, the contract re-exported (142 paths /

@@ -18,7 +18,9 @@
   census with the `shared_groups` leakage verdict — empty is the
   honest carve, a non-empty entry is a verdict, never a warning);
   `split: null` keeps the legacy full-frame lane byte-identical
-  (no split key on the request, no split block on the answer).
+  (the request carries the explicit `split: null` — the
+  pydantic-equal default, the DS-1 shape-consistency pattern; no
+  split block on the answer).
 - **The §15.2 run records at both exits**: the completed run's
   `cross_validation` slot gains the `split` block (the lineage now
   states WHICH frame the cv scores were computed over); the
@@ -69,6 +71,13 @@
   lockstep, the GitHub-page checker green (the README stamps trued
   1.2.245 → 1.2.247 — the D-9 class caught live at the tip this
   round, fixed first).
+- **The post-push CI catch (the Studio frontend lane)**: the
+  ml-workspace field-mirror guard caught the train request literal
+  missing the new `split` key (the local battery had not included
+  tests/test_ml_workspace.py — the battery-boundary lesson); the
+  literal now carries the explicit `split: null` — the DS-1
+  shape-consistency pattern — with the guard 13/13 and the
+  explicit-null wire re-verified live.
 - **The ship (v1.2.247, per the standing tree-changed housekeeping
   ritual — NO release): no tag, no installer; v1.2.244 stands
   published.**

@@ -2218,6 +2218,10 @@ export const mlApi = {
       preprocess: options.preprocess,
       random_state: options.randomState,
       model_params: options.modelParams,
+      // ML-3 — the explicit null keeps the legacy full-frame lane the
+      // pydantic-equal default (the DS-1 shape-consistency pattern);
+      // a section replaces it below when one is requested
+      split: null,
       mode: options.mode ?? "job",
     };
     const split = options.split ?? null;

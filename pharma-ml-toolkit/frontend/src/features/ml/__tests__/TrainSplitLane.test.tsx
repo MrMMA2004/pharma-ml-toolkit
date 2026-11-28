@@ -377,7 +377,9 @@ describe("the ML-3 split strategy lane of the Machine Learning workspace", () =>
         result_ready: true,
       },
     };
-    // the legacy result carries no split key — the parser answers null
+    // the legacy result carries no split block — the parser answers null
+    // (the wire request sends the explicit split: null — the
+    // pydantic-equal default the field-mirror guard pins)
     jobsMocks.result.mockResolvedValue({
       result: { model: TRAIN_RESULT["model"] },
     });
