@@ -380,7 +380,7 @@ consumed. The efficiency and explainability engines below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DL-3 — `POST /api/v1/dl/efficiency` over `ml/quantization.py` + `ml/pruning.py` |
-| Current status | Partial (engines Implemented and tested; route Missing; UI Missing) |
+| Current status | **Implemented (round 384, v1.2.256)** — the `POST /api/v1/dl/efficiency` route served over the REAL weight engines: the persisted tabular estimator's own 2-D weight matrices read off its `_weights` dict (the pickle-portable source of truth a stage-11 checkpoint carries — never a second weight authority), quantized through the engine's own `quantization_report` (int8 absmax or the NF4 block pack with double-quantized scales; bits per weight, RMSE, relative error, the honest memory line over the float32 baseline — the 1-D biases honestly untouched at full width) or magnitude-pruned through the engine's own local/global masks at a target sparsity (the level/scope knobs a 422 on the lanes they do not ride, never a silent skip), the metric delta scored on the model's own training dataset through a pruned COPY — the persisted estimator never mutated, the re-run identity API-pinned; the report registers as a downloadable table artifact; the stage-11c card renders the mode/level/scope controls + the per-layer table + the digest-verified artifact download — pinned by `tests/api/test_dl_efficiency.py` (7 API tests), the vitest pair, and this drift guard `tests/test_frontend_dl_efficiency.py` |
 | Problem | `ml/quantization.py` (NF4 pack with double quantization, int8 absmax, `llm_int8_matmul`, `quantization_report` — `tests/test_quantization.py`) and `ml/pruning.py` (`apply_magnitude_pruning`, `iterative_prune_and_retrain` — `tests/test_pruning.py`) are the toolkit's "DL efficiency lab" (the `dl.quantization`/`dl.pruning` capability rows), none reachable from a route: the DL page's stage 11 (`DLPage.tsx:2070`) persists the full-precision joblib bundle only. |
 | Proposed solution | Add `/dl/efficiency` taking `{model_id, mode: "quantize_int8"|"quantize_nf4"|"prune", level}`; the body loads the persisted estimator's weight arrays through the engines and answers with the `quantization_report` (bits/weight, reconstruction error) or the sparsity + the metric delta after pruning; register the report as a table artifact. |
 | Scientific value | Deployment footprint (int8/NF4) and pruned retraining are the standard efficiency levers for shipping a trained model on a modest desktop — the packaged-app context this toolkit ships in. |
@@ -398,7 +398,7 @@ consumed. The efficiency and explainability engines below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DL-4 — Expose `ml/mpnn.py` (numpy D-MPNN) as a SMILES-input training lane |
-| Current status | Partial (engine Implemented; route Missing; the GNN lane needs hand-built graph specs) |
+| Current status | **Implemented (round 384, v1.2.256)** — the `POST /api/v1/dl/mpnn-train` + `POST /api/v1/dl/mpnn-predict` pair served over the REAL numpy engine (`ml/mpnn.py`'s `DMPNN` — chemprop's directed message passing): the SMILES column re-read server-side off the dataset's own source frame (row-aligned — the one source of truth), the honest rejected-rows accounting (a null cell / a non-string / a parse failure is a row-labeled rejection, never a dropped row), the seeded held-out carve the roadmap's own validation step names (val RMSE + correlation, the pre-registered tolerance API-pinned on the heavy-atom-count fixture: RMSE < 0.75 well under the ~1.35 target std, correlation > 0.8), the shipped model as the FULL-corpus refit registered like any trained model (a MOLECULAR model with its own predict path), the carve minimum pre-flighted in the route (the DL-1 rule — never an async job failure); the D-MPNN lane's frontend section (the lane's own dataset pick + the SMILES column select + the held-out verdict card + the raw-SMILES predict table with the rejected rows rendered inline) — pinned by `tests/api/test_dl_mpnn.py` (5 API tests), the vitest pair, and the drift guard `tests/test_frontend_dl_mpnn.py` |
 | Problem | `src/pharmaml/ml/mpnn.py` implements the chemprop-style directed-message-passing network over RDKit graphs (`build_batch` from SMILES, `DMPNN`, `gradient_check` — tested in-tree), but the only graph-model route (`/dl/gnn-train`) takes explicit `GnnGraphSpec` edge/node lists the GUI user must construct; there is no "give a SMILES column, get a property model" lane anywhere. |
 | Proposed solution | `POST /api/v1/dl/mpnn-train` taking `{dataset_id, smiles_column, target_column, epochs, …}`: `build_batch` featurizes server-side, the DMPNN fits as a managed job, predictions ride `/dl/mpnn-predict` over raw SMILES. Requires scientific validation of the numpy trainer against a published MoleculeNet-scale result before the UI lands (the honest validation step is why this sits long-term). |
 | Scientific value | D-MPNNs are the reference architecture for molecular property prediction from structure alone — the workflow the toolkit's GNN lane gestures at but never reaches from plain SMILES. |
@@ -462,7 +462,7 @@ operator surfaces below are not.
 | Field | Entry |
 | --- | --- |
 | ID / Feature | GEN-3 — `POST /api/v1/generative/rl-optimize` over `run_rl_optimization` |
-| Current status | Partial (engine Implemented; route Missing; method selector offers RNN prior + GA only) |
+| Current status | **Implemented (round 384, v1.2.256)** — the `POST /api/v1/generative/rl-optimize` route served over the REAL engine (`generative/rl.py`'s `run_rl_optimization` — the policy-gradient fine-tuning with the prior-drift anchor and the experience-replay buffer): the objective spec over the SAME builder the GA lane rides, a session prior (`prior_id` over the molecular prior registry, the feature-prior refused with its own pointer) or the engine's own on-the-fly prior, a managed job with per-step telemetry (the RNN train lane's own TRAINING_METRICS event pattern: the per-iteration mean/best curves + the drift diagnostics published after the run — the engine's own introspection, never a fabricated stream) and cancellation BETWEEN iterations through the engine's own new `on_iteration` hook (the population-route precedent); the method selector's THIRD card + the RL execution block (the prior select over the session registry, the verdict card with the leaderboard + the per-iteration step curve through PlotlyFigure) — pinned by `tests/api/test_generative_rl.py` (4 API tests: the trajectory improvement on the seeded QED fixture, the session-prior lane, the honest refusals, the mid-run cancellation), the vitest pair, and the drift guard `tests/test_frontend_generative_rl.py` |
 | Problem | `generative/rl.py` implements `ReinventOptimizer` + `run_rl_optimization` (policy-gradient fine-tuning of an RNN prior against the scoring function, with experience replay — `probe/scratch` history and engine tests in-tree), but the page's method cards (`GenerativePage.tsx:1303`) are exactly two ("the backend's two REAL engines": RNN prior + genetic), and no route serves the RL engine. (The `routes/reinforce.py` the frontend *does* consume is the experimental grid-world `ml.reinforce`, not molecular generation.) |
 | Proposed solution | Add `/generative/rl-optimize` taking `{prior_id, objective, steps, batch_size, lr, …}` as a managed job with per-step telemetry (the RNN train lane's event pattern); the method selector gains a third card wired to a selected prior. |
 | Scientific value | RL fine-tuning is the REINVENT-family recipe for steering a prior toward an objective — the standard de-novo optimization this workspace otherwise only reaches through the GA. |
@@ -1290,6 +1290,75 @@ vitests + 6 client-pair vitests + the 7-clause drift guard
 `tests/test_frontend_dl_gnn_explain.py`. The fourth 3-item set
 (ML-5 + DL-1 + DL-2) is now closed. The next row is DL-3 (the
 efficiency lab — the first row of the fifth set).
+
+— execution log: **row 15 (DL-3) executed in round 384 at v1.2.256** — the
+efficiency lab, the row that opens the fifth 3-item set: the
+`POST /api/v1/dl/efficiency` route over the REAL weight engines
+(`ml/quantization.py`'s own `quantization_report` + `ml/pruning.py`'s
+own magnitude masks), the persisted tabular estimator's own 2-D weight
+matrices read off its `_weights` dict (the pickle-portable source of
+truth a stage-11 checkpoint carries — never a second weight
+authority), the int8 absmax / NF4 block-pack / magnitude-prune lanes
+with the level/scope knobs a 422 on the lanes they do not ride (never
+a silent skip), the metric delta scored on the model's own training
+dataset through a pruned COPY (the persisted estimator never mutated —
+the re-run identity API-pinned), the report registered as a
+downloadable table artifact; the DL page's stage-11c card (the
+mode/level/scope controls + the per-layer table + the digest-verified
+artifact download); 7 API tests + 12 vitests + the 6-clause drift
+guard `tests/test_frontend_dl_efficiency.py`. The next row is DL-4
+(the D-MPNN molecular lane — item 2 of the fifth set).
+
+— execution log: **row 16 (DL-4) executed in round 384 at v1.2.256** — the
+D-MPNN molecular lane, item 2 of the fifth set: the
+`POST /api/v1/dl/mpnn-train` + `POST /api/v1/dl/mpnn-predict` pair
+over the REAL numpy engine (`ml/mpnn.py`'s `DMPNN` — chemprop's
+directed message passing), the SMILES column re-read server-side off
+the dataset's own source frame (the one row-aligned source of truth),
+the honest rejected-rows accounting (a null cell / a non-string / a
+parse failure / a null target is a row-labeled rejection, never a
+dropped row), the seeded held-out carve the roadmap's own validation
+step names (the PRE-REGISTERED tolerance API-pinned on the
+40-molecule heavy-atom fixture: val RMSE < 0.75 and correlation >
+0.8 — the seeded carve measuring 0.109 / 0.991, learned from
+structure alone), the shipped model as the FULL-corpus refit
+registered like any trained model (a MOLECULAR model with its own
+predict path), the carve minimum pre-flighted in the route (the DL-1
+rule — a doomed request is a client error, never an asynchronous job
+failure); the D-MPNN lane's frontend section (the lane's own dataset
+pick + the SMILES column select + the held-out verdict card + the
+raw-SMILES predict table with the rejected rows rendered inline); 5
+API tests + 13 vitests + the 6-clause drift guard
+`tests/test_frontend_dl_mpnn.py`. The next row is GEN-3 (the
+REINVENT-style RL optimizer — the row that closes the fifth set).
+
+— execution log: **row 17 (GEN-3) executed in round 384 at v1.2.256** — the
+REINVENT-style RL optimizer, the row that CLOSES the fifth 3-item
+set: the `POST /api/v1/generative/rl-optimize` route over the REAL
+engine (`generative/rl.py`'s `run_rl_optimization` — the
+policy-gradient fine-tuning of a SMILES RNN prior against the scoring
+objective, with the prior-drift anchor and the experience-replay
+buffer), the objective spec over the SAME builder the GA lane rides
+(one vocabulary, never a second scoring authority), a session prior
+(prior_id over the molecular prior registry, the feature-space prior
+refused with its own MOLECULAR-prior pointer) or the engine's own
+on-the-fly prior (the inline corpus ≥5 minimum; prior_id + corpus
+both a 422, never a silently ignored corpus), a managed job with
+per-step TRAINING_METRICS telemetry (the RNN train lane's own event
+pattern — the engine's own introspection history, never a fabricated
+stream) and CANCELLATION BETWEEN ITERATIONS through the engine's own
+new `on_iteration` hook (the population-route precedent — the full
+generative engine suite re-run green 316/316 after the extension),
+the roadmap's own trajectory clause API-pinned (the second half's
+mean beats the first half's on the seeded 10-iteration QED carve,
+deterministic under the engine's own seeding); the method selector's
+THIRD card + the RL execution block (the prior select over the
+session registry, the verdict card with the ranked leaderboard + the
+per-iteration step curve through PlotlyFigure); 4 API tests + 8
+vitests + the 7-clause drift guard
+`tests/test_frontend_generative_rl.py`. The fifth 3-item set
+(DL-3 + DL-4 + GEN-3) is now closed. The next row is GEN-4 (the MCTS
+molecule designer — the sixth 3-item set opens with it).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all

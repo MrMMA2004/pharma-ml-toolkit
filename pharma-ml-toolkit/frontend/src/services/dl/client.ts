@@ -304,6 +304,96 @@ export interface GnnExplainOptions {
   readonly iters: number | null;
 }
 
+/**
+ * DL-4 (the roadmap's row 16) — the D-MPNN train options (mirrored
+ * from `routes/dl.py`'s MpnnTrainRequest: dataset + SMILES column).
+ */
+export interface MpnnTrainOptions {
+  readonly datasetId: string;
+  readonly smilesColumn: string;
+  /** optional echo check — must be the dataset's own target */
+  readonly targetColumn?: string | null;
+  readonly hiddenSize?: number;
+  readonly depth?: number;
+  readonly ffnHidden?: number | null;
+  readonly aggregation?: "norm" | "sum" | "mean";
+  readonly aggregationNorm?: number;
+  readonly dropout?: number;
+  readonly epochs?: number;
+  readonly lr?: number;
+  readonly batchSize?: number | null;
+  readonly valSplit?: number;
+  readonly standardize?: boolean;
+  readonly seed?: number;
+  readonly mode?: "job" | "sync";
+}
+
+/** The D-MPNN-trained model view — a MOLECULAR model with its own path. */
+export interface MpnnModelView extends DLModelView {
+  readonly molecular_model: boolean;
+}
+
+/** One rejected row's honest accounting (train and predict lanes). */
+export interface MpnnRejectedRow {
+  readonly index: number;
+  readonly smiles: string | null;
+  readonly error: string;
+}
+
+/** The mpnn-train result payload (the COMPLETED job / sync answer). */
+export interface MpnnTrainResult {
+  readonly model: MpnnModelView;
+  /** the held-out carve's RMSE — the roadmap's own validation step */
+  readonly val_rmse: number;
+  readonly val_n: number;
+  readonly val_correlation: number | null;
+  /** the last five fit-loss entries of both fits — the honest tails */
+  readonly train_history_tail: readonly number[];
+  readonly refit_history_tail: readonly number[];
+  readonly n_rows: number;
+  readonly n_rejected: number;
+  readonly rejected: readonly MpnnRejectedRow[];
+  readonly n_parameters: number;
+  readonly held_out_note: string;
+}
+
+/** The mpnn-train job-mode submission answer. */
+export interface MpnnJobResponse {
+  readonly mode: "job";
+  readonly job: JobView;
+}
+
+/** The mpnn-train sync answer — the train body spread directly. */
+export interface MpnnTrainSyncResponse {
+  readonly mode: "sync";
+  readonly result: MpnnTrainResult;
+}
+
+export type MpnnTrainResponse = MpnnJobResponse | MpnnTrainSyncResponse;
+
+/** One valid prediction row (aligned with the served index). */
+export interface MpnnPredictionRow {
+  readonly index: number;
+  readonly smiles: string;
+  readonly prediction: number;
+}
+
+/** The mpnn-predict answer (the molecular models' own path). */
+export interface MpnnPredictResponse {
+  readonly model_id: string;
+  readonly n_valid: number;
+  readonly predictions: readonly MpnnPredictionRow[];
+  readonly n_rejected: number;
+  readonly rejected: readonly MpnnRejectedRow[];
+  readonly note: string;
+}
+
+/** DL-4 — the predict lane's request options. */
+export interface MpnnPredictOptions {
+  readonly modelId: string;
+  readonly smiles: readonly string[];
+}
+
 /** DL-2 — the `POST /api/v1/dl/gnn-explain` answer (sync). */
 export interface GnnExplainResult {
   readonly mode: "sync";
@@ -312,6 +402,78 @@ export interface GnnExplainResult {
   readonly top_k: number;
   readonly seed: number;
   readonly graphs: readonly GnnExplainGraphRow[];
+  readonly note: string;
+}
+
+/**
+ * DL-3 (the roadmap's row 15) — the efficiency lab's request body
+ * (mirrored from `routes/dl.py`'s DLEfficiencyRequest).
+ */
+export interface DLEfficiencyOptions {
+  readonly modelId: string;
+  readonly mode: "quantize_int8" | "quantize_nf4" | "prune";
+  /** the prune lane's target sparsity [0, 1) — required on prune */
+  readonly level: number | null;
+  /** the magnitude engine's own scope vocabulary (prune only) */
+  readonly scope: "local" | "global";
+  /** the report rides as a downloadable table artifact */
+  readonly artifact: boolean;
+}
+
+/** One quantize-mode layer row (the engine's own report fields). */
+export interface DLEfficiencyQuantRow {
+  readonly kind: "quantize";
+  readonly layer: string;
+  readonly shape: readonly number[];
+  readonly nWeights: number;
+  readonly method: string;
+  readonly bitsPerWeight: number;
+  readonly rmse: number;
+  readonly relativeError: number;
+}
+
+/** One prune-mode layer row (the magnitude engine's own counts). */
+export interface DLEfficiencyPruneRow {
+  readonly kind: "prune";
+  readonly layer: string;
+  readonly shape: readonly number[];
+  readonly nWeights: number;
+  readonly nZeroed: number;
+  readonly nKept: number;
+  readonly sparsity: number;
+}
+
+/** The prune lane's metric block (scored on a pruned COPY). */
+export interface DLEfficiencyMetric {
+  readonly kind: string;
+  readonly before: number | null;
+  readonly after: number | null;
+  readonly delta: number | null;
+  readonly note: string;
+}
+
+/** DL-3 — the `POST /api/v1/dl/efficiency` answer (sync). */
+export interface DLEfficiencyResult {
+  readonly mode: "sync";
+  readonly modelId: string;
+  readonly network: string;
+  readonly efficiencyMode: "quantize_int8" | "quantize_nf4" | "prune";
+  readonly nLayers: number;
+  readonly nWeights: number;
+  readonly layers: readonly (DLEfficiencyQuantRow | DLEfficiencyPruneRow)[];
+  readonly artifact: ArtifactView | null;
+  // the quantize totals (null on the prune lane)
+  readonly method: string | null;
+  readonly bitsPerWeight: number | null;
+  readonly originalBits: number | null;
+  readonly quantizedBits: number | null;
+  readonly memorySavings: number | null;
+  // the prune totals (null on the quantize lanes)
+  readonly targetSparsity: number | null;
+  readonly scope: string | null;
+  readonly nZeroed: number | null;
+  readonly achievedSparsity: number | null;
+  readonly metric: DLEfficiencyMetric | null;
   readonly note: string;
 }
 
@@ -570,6 +732,91 @@ export const dlApi = {
       request,
     )) as Record<string, unknown>;
     return parseGnnExplainResult(raw, "dl.gnn-explain");
+  },
+
+  /**
+   * `POST /api/v1/dl/efficiency` — DL-3 (the roadmap's row 15): the
+   * weight-efficiency lab over the REAL quantization/pruning engines
+   * (int8 absmax / the NF4 block pack / the magnitude masks), the
+   * report registered as a downloadable table artifact. Sync by
+   * design (one matrix sweep per mode); the persisted estimator is
+   * never mutated (the prune lane scores a pruned COPY).
+   */
+  async efficiency(options: DLEfficiencyOptions): Promise<DLEfficiencyResult> {
+    const request: Record<string, unknown> = {
+      model_id: options.modelId,
+      mode: options.mode,
+      level: options.level ?? undefined,
+      scope: options.scope,
+      artifact: options.artifact,
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/efficiency",
+      request,
+    )) as Record<string, unknown>;
+    return parseDLEfficiencyResult(raw, "dl.efficiency");
+  },
+
+  /**
+   * `POST /api/v1/dl/mpnn-train` — DL-4 (the roadmap's row 16): the
+   * REAL numpy D-MPNN (chemprop's directed message passing) over a
+   * registered dataset's own SMILES column: the column re-read
+   * server-side, the honest rejected-rows accounting, the seeded
+   * held-out carve the roadmap's own validation step names, and the
+   * shipped model as the FULL-corpus refit (job or sync).
+   */
+  async mpnnTrain(options: MpnnTrainOptions): Promise<MpnnTrainResponse> {
+    const request: Record<string, unknown> = {
+      dataset_id: options.datasetId,
+      smiles_column: options.smilesColumn,
+      target_column: options.targetColumn ?? undefined,
+      hidden_size: options.hiddenSize ?? 64,
+      depth: options.depth ?? 3,
+      ffn_hidden: options.ffnHidden ?? undefined,
+      aggregation: options.aggregation ?? "norm",
+      aggregation_norm: options.aggregationNorm ?? 100.0,
+      dropout: options.dropout ?? 0.0,
+      epochs: options.epochs ?? 200,
+      lr: options.lr ?? 1e-3,
+      batch_size: options.batchSize ?? undefined,
+      val_split: options.valSplit ?? 0.2,
+      standardize: options.standardize ?? true,
+      seed: options.seed ?? 0,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/mpnn-train",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      return {
+        mode: "sync",
+        result: parseMpnnTrainResult(raw, "dl.mpnn-train(sync)"),
+      };
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "dl.mpnn-train(job)"),
+    };
+  },
+
+  /**
+   * `POST /api/v1/dl/mpnn-predict` — the molecular models' own
+   * prediction path over raw SMILES (the predictions in the original
+   * target units, the rejected rows riding their own accounting).
+   */
+  async mpnnPredict(
+    options: MpnnPredictOptions,
+  ): Promise<MpnnPredictResponse> {
+    const request: Record<string, unknown> = {
+      model_id: options.modelId,
+      smiles: [...options.smiles],
+    };
+    const raw = (await api.post(
+      "/api/v1/dl/mpnn-predict",
+      request,
+    )) as Record<string, unknown>;
+    return parseMpnnPredictResult(raw, "dl.mpnn-predict");
   },
 
   /**
@@ -1208,6 +1455,354 @@ export function parseGnnExplainResult(
     top_k: topK,
     seed,
     graphs,
+    note,
+  };
+}
+
+/**
+ * Narrow the DL-3 efficiency answer: the mode-specific totals and
+ * per-layer rows, with the quantize/prune lanes' own fields never
+ * implied (an absent total is null, never zero — the honest parser
+ * rule every lane here follows).
+ */
+export function parseDLEfficiencyResult(
+  raw: unknown,
+  what: string,
+): DLEfficiencyResult {
+  const r = expectObject(raw, what);
+  const modelId = r["model_id"];
+  const network = r["network"];
+  const efficiencyModeRaw = r["efficiency_mode"];
+  const nLayers = asNumber(r["n_layers"]);
+  const nWeights = asNumber(r["n_weights"]);
+  const note = r["note"];
+  if (
+    typeof modelId !== "string" ||
+    typeof network !== "string" ||
+    typeof efficiencyModeRaw !== "string" ||
+    nLayers === null ||
+    nWeights === null ||
+    typeof note !== "string"
+  ) {
+    throw new Error(
+      `${what}: model_id/network/efficiency_mode/n_weights/note are not ` +
+        "the answer's own types",
+    );
+  }
+  const efficiencyMode = efficiencyModeRaw as DLEfficiencyResult["efficiencyMode"];
+  const layersRaw = r["layers"];
+  if (!Array.isArray(layersRaw) || layersRaw.length !== nLayers) {
+    throw new Error(
+      `${what}: layers is not the answer's own per-layer table`,
+    );
+  }
+  const layers: (DLEfficiencyQuantRow | DLEfficiencyPruneRow)[] = [];
+  for (const rowRaw of layersRaw as unknown[]) {
+    const row = expectObject(rowRaw, `${what} layer row`);
+    const layer = row["layer"];
+    const shapeRaw = row["shape"];
+    const rowN = asNumber(row["n_weights"]);
+    if (
+      typeof layer !== "string" ||
+      !Array.isArray(shapeRaw) ||
+      rowN === null
+    ) {
+      throw new Error(`${what}: a layer row lost its identity/shape/count`);
+    }
+    const shape = shapeRaw.filter(
+      (d): d is number => typeof d === "number",
+    );
+    if (efficiencyMode === "prune") {
+      const nZeroed = asNumber(row["n_zeroed"]);
+      const nKept = asNumber(row["n_kept"]);
+      const sparsity = asNumber(row["sparsity"]);
+      if (nZeroed === null || nKept === null || sparsity === null) {
+        throw new Error(
+          `${what}: a prune row lost its counts (an absent count is ` +
+            "never an implied zero)",
+        );
+      }
+      layers.push({
+        kind: "prune",
+        layer,
+        shape,
+        nWeights: rowN,
+        nZeroed,
+        nKept,
+        sparsity,
+      });
+    } else {
+      const method = row["method"];
+      const bitsPerWeight = asNumber(row["bits_per_weight"]);
+      const rmse = asNumber(row["rmse"]);
+      const relativeError = asNumber(row["relative_error"]);
+      if (
+        typeof method !== "string" ||
+        bitsPerWeight === null ||
+        rmse === null ||
+        relativeError === null
+      ) {
+        throw new Error(
+          `${what}: a quantize row lost the engine's own report fields`,
+        );
+      }
+      layers.push({
+        kind: "quantize",
+        layer,
+        shape,
+        nWeights: rowN,
+        method,
+        bitsPerWeight,
+        rmse,
+        relativeError,
+      });
+    }
+  }
+  // the mode-specific totals: null on the lanes they do not ride
+  const quantTotals =
+    efficiencyMode === "prune"
+      ? null
+      : (() => {
+          const method = r["method"];
+          const bitsPerWeight = asNumber(r["bits_per_weight"]);
+          const originalBits = asNumber(r["original_bits"]);
+          const quantizedBits = asNumber(r["quantized_bits"]);
+          const memorySavings = asNumber(r["memory_savings"]);
+          if (
+            typeof method !== "string" ||
+            bitsPerWeight === null ||
+            originalBits === null ||
+            quantizedBits === null ||
+            memorySavings === null
+          ) {
+            throw new Error(
+              `${what}: the quantize totals lost the engine's own fields`,
+            );
+          }
+          return {
+            method,
+            bitsPerWeight,
+            originalBits,
+            quantizedBits,
+            memorySavings,
+          };
+        })();
+  const pruneTotals =
+    efficiencyMode === "prune"
+      ? (() => {
+          const targetSparsity = asNumber(r["target_sparsity"]);
+          const scope = r["scope"];
+          const nZeroed = asNumber(r["n_zeroed"]);
+          const achievedSparsity = asNumber(r["achieved_sparsity"]);
+          if (
+            targetSparsity === null ||
+            typeof scope !== "string" ||
+            nZeroed === null ||
+            achievedSparsity === null
+          ) {
+            throw new Error(
+              `${what}: the prune totals lost the engine's own counts`,
+            );
+          }
+          return { targetSparsity, scope, nZeroed, achievedSparsity };
+        })()
+      : null;
+  // the metric block rides the prune lane only
+  let metric: DLEfficiencyMetric | null = null;
+  if (efficiencyMode === "prune") {
+    const metricRaw = r["metric"];
+    if (typeof metricRaw !== "object" || metricRaw === null) {
+      throw new Error(`${what}: the prune lane lost its metric block`);
+    }
+    const m = expectObject(metricRaw, `${what} metric`);
+    const kind = m["kind"];
+    const metricNote = m["note"];
+    if (typeof kind !== "string" || typeof metricNote !== "string") {
+      throw new Error(`${what}: the metric block lost its kind/note`);
+    }
+    metric = {
+      kind,
+      before: asNumber(m["before"]),
+      after: asNumber(m["after"]),
+      delta: asNumber(m["delta"]),
+      note: metricNote,
+    };
+  }
+  // the artifact: null when the lane was asked to skip it (the
+  // request's own flag — never a silent default)
+  const artifactRaw = r["artifact"];
+  const artifact =
+    typeof artifactRaw === "object" && artifactRaw !== null
+      ? parseArtifactView(artifactRaw, `${what} artifact`)
+      : null;
+  return {
+    mode: "sync",
+    modelId,
+    network,
+    efficiencyMode,
+    nLayers,
+    nWeights,
+    layers,
+    artifact,
+    method: quantTotals?.method ?? null,
+    bitsPerWeight: quantTotals?.bitsPerWeight ?? null,
+    originalBits: quantTotals?.originalBits ?? null,
+    quantizedBits: quantTotals?.quantizedBits ?? null,
+    memorySavings: quantTotals?.memorySavings ?? null,
+    targetSparsity: pruneTotals?.targetSparsity ?? null,
+    scope: pruneTotals?.scope ?? null,
+    nZeroed: pruneTotals?.nZeroed ?? null,
+    achievedSparsity: pruneTotals?.achievedSparsity ?? null,
+    metric,
+    note,
+  };
+}
+
+/**
+ * DL-4 — narrow the mpnn-train answer: the held-out carve's own
+ * verdicts (val_rmse always a float; val_correlation null when the
+ * carve was too small or degenerate — never an implied zero) plus
+ * the honest rejected-rows accounting.
+ */
+export function parseMpnnTrainResult(
+  raw: unknown,
+  what: string,
+): MpnnTrainResult {
+  const r = expectObject(raw, what);
+  const model = parseMpnnModelView(r["model"], `${what} model`);
+  const valRmse = asNumber(r["val_rmse"]);
+  const valN = asNumber(r["val_n"]);
+  const nRows = asNumber(r["n_rows"]);
+  const nRejected = asNumber(r["n_rejected"]);
+  const nParameters = asNumber(r["n_parameters"]);
+  const note = r["held_out_note"];
+  if (
+    valRmse === null ||
+    valN === null ||
+    nRows === null ||
+    nRejected === null ||
+    nParameters === null ||
+    typeof note !== "string"
+  ) {
+    throw new Error(
+      `${what}: val_rmse/val_n/n_rows/n_rejected/n_parameters lost ` +
+        "the route's own types",
+    );
+  }
+  return {
+    model,
+    val_rmse: valRmse,
+    val_n: valN,
+    val_correlation: asNumber(r["val_correlation"]),
+    train_history_tail: asNumberArray(r["train_history_tail"], `${what} train tail`),
+    refit_history_tail: asNumberArray(r["refit_history_tail"], `${what} refit tail`),
+    n_rows: nRows,
+    n_rejected: nRejected,
+    rejected: parseMpnnRejected(r["rejected"], what),
+    n_parameters: nParameters,
+    held_out_note: note,
+  };
+}
+
+/** Narrow the D-MPNN model view (the trained view + the molecular keys). */
+function parseMpnnModelView(raw: unknown, what: string): MpnnModelView {
+  const r = expectObject(raw, what);
+  return {
+    ...parseDLModelView(raw, what),
+    molecular_model: r["molecular_model"] === true,
+  };
+}
+
+/** The rejected rows' own accounting (index + smiles + error). */
+function parseMpnnRejected(raw: unknown, what: string): MpnnRejectedRow[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const rows: MpnnRejectedRow[] = [];
+  for (const rowRaw of raw as unknown[]) {
+    const row = expectObject(rowRaw, `${what} rejected row`);
+    const index = asNumber(row["index"]);
+    const smiles = row["smiles"];
+    const error = row["error"];
+    if (index === null || typeof error !== "string") {
+      throw new Error(
+        `${what}: a rejected row lost its index/error (a row dropped ` +
+          "silently is never the honest accounting)",
+      );
+    }
+    rows.push({
+      index,
+      smiles: typeof smiles === "string" ? smiles : null,
+      error,
+    });
+  }
+  return rows;
+}
+
+function asNumberArray(raw: unknown, what: string): number[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`${what} is not an array`);
+  }
+  return raw.filter((v): v is number => typeof v === "number");
+}
+
+/**
+ * DL-4 — narrow the mpnn-predict answer: one prediction per VALID
+ * row (aligned with the served index), the rejected rows riding
+ * their own accounting.
+ */
+export function parseMpnnPredictResult(
+  raw: unknown,
+  what: string,
+): MpnnPredictResponse {
+  const r = expectObject(raw, what);
+  const modelId = r["model_id"];
+  const nValid = asNumber(r["n_valid"]);
+  const nRejected = asNumber(r["n_rejected"]);
+  const note = r["note"];
+  if (
+    typeof modelId !== "string" ||
+    nValid === null ||
+    nRejected === null ||
+    typeof note !== "string"
+  ) {
+    throw new Error(
+      `${what}: model_id/n_valid/n_rejected/note lost the route's own types`,
+    );
+  }
+  const predictionsRaw = r["predictions"];
+  if (!Array.isArray(predictionsRaw)) {
+    throw new Error(`${what}: predictions is not an array`);
+  }
+  const predictions: MpnnPredictionRow[] = [];
+  for (const rowRaw of predictionsRaw as unknown[]) {
+    const row = expectObject(rowRaw, `${what} prediction row`);
+    const index = asNumber(row["index"]);
+    const smiles = row["smiles"];
+    const prediction = asNumber(row["prediction"]);
+    if (
+      index === null ||
+      typeof smiles !== "string" ||
+      prediction === null
+    ) {
+      throw new Error(
+        `${what}: a prediction row lost its index/smiles/prediction`,
+      );
+    }
+    predictions.push({ index, smiles, prediction });
+  }
+  if (predictions.length !== nValid) {
+    throw new Error(
+      `${what}: predictions (${predictions.length}) disagree with the ` +
+        `served n_valid (${nValid})`,
+    );
+  }
+  return {
+    model_id: modelId,
+    n_valid: nValid,
+    predictions,
+    n_rejected: nRejected,
+    rejected: parseMpnnRejected(r["rejected"], what),
     note,
   };
 }

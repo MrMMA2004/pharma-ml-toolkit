@@ -56,6 +56,7 @@ from pharmaml.generative.diffusion import FeatureSpaceDiffusion
 from pharmaml.generative.gan import FeatureSpaceGAN
 from pharmaml.generative.genetic import GeneticOptimizer
 from pharmaml.generative.moses_metrics import generation_metrics
+from pharmaml.generative.rl import run_rl_optimization
 from pharmaml.generative.rnn import SmilesRnn
 from pharmaml.generative.scoring import (
     LogPBandObjective,
@@ -1024,3 +1025,266 @@ def diffusion_sample(req: DiffusionSampleRequest, request: Request) -> dict:
             "real data; feature-space generation, not molecules"
         ),
     }
+
+
+# -- GEN-3: the REINVENT-style RL optimizer (the roadmap's row 17) --------
+
+class RlOptimizeRequest(BaseModel):
+    """POST /api/v1/generative/rl-optimize — the molecular RL body.
+
+    The objective spec rides the SAME vocabulary the GA lane and the
+    prior-train lane serve (``_build_objective`` — one builder, one
+    catalog, never a second scoring authority); the prior is a
+    session-trained molecular RNN prior (``prior_id``) or the
+    engine's own on-the-fly prior over an inline corpus (or the
+    engine's DEFAULT_CORPUS when neither is given).
+    """
+
+    objective: dict[str, Any]
+    # a session-trained molecular prior (POST /api/v1/generative/rnn/train);
+    # when None the engine trains its own prior from the corpus
+    prior_id: str | None = None
+    # the on-the-fly prior's corpus (ignored — refused — with prior_id):
+    # inline SMILES, or None for the engine's own DEFAULT_CORPUS
+    smiles: list[str] | None = Field(
+        default=None, max_length=_MAX_INLINE_SMILES
+    )
+    prior_epochs: int = Field(default=8, ge=1, le=200)
+    # the engine's own optimize knobs (mirrored verbatim)
+    iterations: int = Field(default=30, ge=1, le=500)
+    batch_size: int = Field(default=32, ge=4, le=256)
+    temperature: float = Field(default=0.9, gt=0.05, le=3.0)
+    lr: float = Field(default=0.003, gt=0.0, le=1.0)
+    anchor_weight: float = Field(default=0.1, ge=0.0, le=10.0)
+    entropy_bonus: float = Field(default=0.02, ge=0.0, le=1.0)
+    replay_size: int = Field(default=64, ge=1, le=1024)
+    patience: int = Field(default=5, ge=1, le=100)
+    max_smiles_length: int = Field(default=120, ge=10, le=256)
+    seed: int = Field(default=42, ge=0, le=2**31 - 1)
+    top_n: int = Field(default=20, ge=1, le=100)
+    mode: Literal["job", "sync"] = "job"
+
+
+def _rl_optimize_body(
+    objective_spec: dict[str, Any],
+    prior: Any,
+    corpus: list[str] | None,
+    prior_epochs: int,
+    rl_kwargs: dict[str, Any],
+    iterations: int,
+    top_n: int,
+    prior_source: str,
+    prior_record=None,
+    bus=None,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL policy-gradient fine-tuning loop."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the RL assembly stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 5, "assembling the objective"
+        )
+    objective = _build_objective(objective_spec)
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 12, f"the prior ({prior_source})"
+        )
+
+    def on_iteration(index: int) -> None:
+        # the cancellation seam (the population-route precedent): a
+        # mid-run cancel lands BETWEEN iterations, before this
+        # iteration's sampling — the engine's own hook
+        if cancel_event is not None and cancel_event.is_set():
+            raise CancelledJob(
+                f"Cancelled between RL iterations (after {index})"
+            )
+        if manager is not None and job_id is not None:
+            manager.report_progress(
+                job_id,
+                min(90, 12 + int(78.0 * (index + 1) / max(1, iterations))),
+                f"RL iteration {index + 1}/{iterations}",
+                event=EventType.ITERATION_UPDATE,
+            )
+
+    try:
+        result = run_rl_optimization(
+            objective,
+            prior=prior,
+            corpus=corpus,
+            prior_epochs=prior_epochs,
+            on_iteration=on_iteration,
+            **rl_kwargs,
+        )
+    except (DataValidationError, ModelError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 92, "ranking the run")
+
+    # the per-iteration telemetry published through the SAME event the
+    # prior-train lane rides (TRAINING_METRICS): the mean/best score
+    # curves + the prior-drift diagnostics — the history the engine
+    # already computed, never a fabricated stream
+    if bus is not None:
+        bus.publish(
+            EventType.TRAINING_METRICS,
+            {
+                "stage": "rl optimized",
+                "iterations": len(result.history),
+                "mean_scores": [
+                    json_safe(row.get("mean_score"))
+                    for row in result.history
+                ],
+                "best_scores": [
+                    json_safe(row.get("best_score"))
+                    for row in result.history
+                ],
+                "drift": [
+                    json_safe(row.get("drift"))
+                    for row in result.history
+                ],
+            },
+            job_id=job_id,
+        )
+
+    ranked = sorted(
+        zip(result.smiles, result.scores, result.breakdown),
+        key=lambda t: t[1],
+        reverse=True,
+    )
+    top = [
+        {"smiles": s, "score": json_safe(sc),
+         "breakdown": json_safe(br)}
+        for s, sc, br in ranked[:top_n]
+    ]
+    return {
+        "optimization": {
+            "best": result.best,
+            "best_score": json_safe(result.best_score),
+            "iterations": len(result.history),
+            "history": json_safe(result.history),
+            "metadata": json_safe(result.metadata),
+            "top": top,
+        },
+        "prior": prior_record.view() if prior_record is not None else None,
+        "note": (
+            "the REINVENT-style recipe over the REAL engine: the "
+            "policy-gradient fine-tuning of a SMILES RNN prior against "
+            "the scoring objective, with the prior-drift anchor and the "
+            "experience-replay buffer; the history carries one record "
+            "per iteration (mean/best score, valid fraction, the drift "
+            "diagnostics) — the engine's own introspection, never a "
+            "fabricated stream"
+        ),
+    }
+
+
+@router.post("/rl-optimize")
+def rl_optimize(req: RlOptimizeRequest, request: Request) -> dict:
+    """GEN-3 — the REINVENT-style molecular RL optimizer.
+
+    ``run_rl_optimization`` over a session-trained prior (``prior_id``)
+    or the engine's own on-the-fly prior; the objective spec rides the
+    SAME vocabulary the GA lane serves; a managed job with per-step
+    telemetry (the RNN train lane's event pattern) and cancellation
+    BETWEEN iterations (the population-route precedent).
+    """
+    # the objective spec validated up front (both modes): an unknown
+    # kind is a client error, not an asynchronous job failure
+    _build_objective(req.objective)
+
+    prior = None
+    prior_record = None
+    corpus = None
+    prior_source = "engine's on-the-fly prior over the DEFAULT_CORPUS"
+    if req.prior_id is not None:
+        if req.smiles is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "pass prior_id or an inline corpus (smiles), not both — "
+                    "the prior lane never silently ignores a corpus"
+                ),
+            )
+        prior_record = request.app.state.prior_store.get(req.prior_id)
+        if prior_record is None:
+            raise HTTPException(
+                status_code=404, detail="Unknown prior_id."
+            )
+        if not isinstance(prior_record.model, SmilesRnn):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"prior {req.prior_id} is a feature-space prior; the "
+                    "RL lane needs a MOLECULAR prior trained through "
+                    "POST /api/v1/generative/rnn/train"
+                ),
+            )
+        prior = prior_record.model
+        prior_source = f"session prior {req.prior_id}"
+    elif req.smiles is not None:
+        corpus = [s for s in req.smiles if isinstance(s, str) and s.strip()]
+        if len(corpus) < 5:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "an on-the-fly prior corpus needs at least 5 SMILES "
+                    "strings (the prior-train lane's own minimum)"
+                ),
+            )
+        prior_source = f"engine's on-the-fly prior over {len(corpus)} SMILES"
+
+    rl_kwargs = {
+        "iterations": req.iterations,
+        "batch_size": req.batch_size,
+        "temperature": req.temperature,
+        "lr": req.lr,
+        "anchor_weight": req.anchor_weight,
+        "entropy_bonus": req.entropy_bonus,
+        "replay_size": req.replay_size,
+        "patience": req.patience,
+        "max_smiles_length": req.max_smiles_length,
+        "seed": req.seed,
+    }
+    manager = request.app.state.job_manager
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_rl_optimize_body(
+                req.objective, prior, corpus, req.prior_epochs, rl_kwargs,
+                req.iterations, req.top_n, prior_source,
+                prior_record=prior_record, bus=request.app.state.bus,
+            ),
+        }
+    record = manager.submit(
+        "generative.rl-optimize",
+        "generative-ai",
+        _rl_optimize_body,
+        configuration={
+            "objective": req.objective,
+            "prior_id": req.prior_id,
+            "corpus": (
+                f"inline ({len(corpus)} SMILES)"
+                if corpus is not None
+                else ("none" if req.prior_id is not None else "DEFAULT_CORPUS")
+            ),
+            "iterations": req.iterations,
+            "batch_size": req.batch_size,
+            "seed": req.seed,
+        },
+        objective_spec=req.objective,
+        prior=prior,
+        corpus=corpus,
+        prior_epochs=req.prior_epochs,
+        rl_kwargs=rl_kwargs,
+        iterations=req.iterations,
+        top_n=req.top_n,
+        prior_source=prior_source,
+        prior_record=prior_record,
+        bus=request.app.state.bus,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}

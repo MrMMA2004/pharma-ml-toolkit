@@ -91,7 +91,13 @@
     ML-5 drift-guard tests + the 6 DL-1 API tests + the 6 DL-1
     drift-guard tests + the 5 DL-2 API tests + the 7 DL-2
     drift-guard tests + the r383-borne consumption pin edits). */
-export const SHIPPED_TEST_COUNT = 8474;
+/*  r384 re-true (the v1.2.256 fifth-set ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,509
+    collected / 0 errors over 463 files (the +35/+6 over the r383
+    pin: the fifth set's rows -- the 7 DL-3 API tests + the 5 DL-4
+    API tests + the 4 GEN-3 API tests + the 6 DL-3 + 6 DL-4 + 7
+    GEN-3 drift-guard tests). */
+export const SHIPPED_TEST_COUNT = 8509;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -177,7 +183,14 @@ export const SHIPPED_TEST_COUNT = 8474;
     page tests + the 6 client-parser tests) + the 9-test DL-2 pair
     (the 3 edge-attribution page tests + the 6 client-parser
     tests)). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 475;
+/*  r384 re-true (the v1.2.256 fifth-set ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 508/508 over 67
+    files (the +33/+6 over the r383 pin: the fifth set's rows --
+    the 12-test DL-3 pair (the 5 efficiency-lane page tests + the 7
+    client-parser tests) + the 13-test DL-4 pair (the 5 mpnn-lane
+    page tests + the 8 client-parser tests) + the 8-test GEN-3 pair
+    (the 2 rl-lane page tests + the 6 client-parser tests)). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 508;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -341,7 +354,15 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 475;
     254 homes, and the census counts them; the byte growth over
     961,015,202 B is the retained-254 churn + the 255 zips + the
     re-executed notebook outputs + the fourth set's own lanes). */
-export const SHIPPED_FILE_COUNT = 1954;
+/*  r384 re-true (the v1.2.256 fifth-set ship, measurement-last): the
+    census re-walked on the FINAL fixed point -- 1,968 files /
+    1,075,130,508 B (the +14 files over the r383 pin 1,954: the six
+    new pytest batteries (the three API files + the three drift
+    guards) + the six new vitest pair files + the two new in-tree
+    256-zip homes (the toolkit's download/ + dist-archive/); the
+    byte growth over 1,017,905,081 B is the 256 zips + the
+    re-executed notebook outputs + the fifth set's own lanes). */
+export const SHIPPED_FILE_COUNT = 1968;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -569,7 +590,25 @@ export const SHIPPED_FILE_COUNT = 1954;
     the fourth set's three rows' lanes + the re-executed notebook
     outputs + the retained 254/255 zip churn + the ledger
     carriers). */
-export const SHIPPED_SOURCE_LINES = 615000;
+/*  r384 re-true (the v1.2.256 fifth-set ship, measurement-last): the
+    census re-measured live on the FINAL fixed point under the
+    committed census_210/toolkit-fs countLines semantics -- 617,932
+    lines (the like-for-like +2,932 over the r383 pin 615,000: the
+    fifth set's three rows' lanes + the re-executed notebook outputs
+    + the 256 zip churn + the ledger carriers). */
+/*  r385 recovery re-true (measurement-last on the recovered + completed
+    tree): the r384 session was cut off mid-close-out -- its roadmap
+    rows-15/16/17 execution-log entries never persisted (the ledger
+    claimed them written; both the shipped zip's copy and the disk
+    copy ended at row 14's entry), and the r384 reading (617,932)
+    could NOT be reproduced on the recovered tree (which read 617,902
+    before any completion edit -- recorded honestly as an
+    unreproducible reading, superseded here). This round re-wrote the
+    three missing execution-log entries from the in-tree ledger
+    records (the counter's r384 note + the worklog's R384 entry) and
+    re-measured: 617,971 lines (the +69 over the recovered 617,902 =
+    the three completed entries; files unchanged at 1,968). */
+export const SHIPPED_SOURCE_LINES = 617971;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

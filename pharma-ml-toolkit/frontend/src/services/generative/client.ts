@@ -232,6 +232,70 @@ export interface OptimizeOptions {
   readonly mode?: "job" | "sync";
 }
 
+/**
+ * GEN-3 (the roadmap's row 17) — the RL lane's request options
+ * (mirrored from `routes/generative.py`'s RlOptimizeRequest: the
+ * REINVENT-style optimizer over a prior or the on-the-fly corpus).
+ */
+export interface RlOptimizeOptions {
+  /** The objective spec (the SAME vocabulary the GA lane rides). */
+  readonly objective: Record<string, unknown>;
+  /** a session-trained molecular prior, or null for the engine's own */
+  readonly priorId: string | null;
+  /** an inline on-the-fly prior corpus (or null for DEFAULT_CORPUS) */
+  readonly smiles: readonly string[] | null;
+  readonly priorEpochs: number;
+  readonly iterations: number;
+  readonly batchSize: number;
+  readonly temperature: number;
+  readonly lr: number;
+  readonly anchorWeight: number;
+  readonly entropyBonus: number;
+  readonly replaySize: number;
+  readonly patience: number;
+  readonly maxSmilesLength: number;
+  readonly seed: number;
+  readonly topN: number;
+  readonly mode?: "job" | "sync";
+}
+
+/** GEN-3 — one RL history row (the engine's own introspection). */
+export interface RlIterationRow {
+  readonly iteration: number;
+  readonly best_score: number | null;
+  readonly mean_score: number | null;
+  readonly valid_fraction: number | null;
+  readonly drift: number | null;
+  readonly entropy: number | null;
+  readonly loss: number | null;
+}
+
+/** GEN-3 — the rl-optimize answer's optimization block. */
+export interface RlOptimizationView {
+  readonly best: string | null;
+  readonly best_score: number | null;
+  readonly iterations: number;
+  readonly history: readonly RlIterationRow[];
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly top: readonly OptimizationTopRow[];
+}
+
+/** GEN-3 — the rl-optimize sync answer (the job relay carries the same). */
+export interface RlOptimizeResult {
+  readonly mode: "sync";
+  readonly optimization: RlOptimizationView;
+  readonly prior: PriorView | null;
+  readonly note: string;
+}
+
+/** The RL lane's submission answer (job mode). */
+export interface RlJobResponse {
+  readonly mode: "job";
+  readonly job: JobView;
+}
+
+export type RlOptimizeResponse = RlJobResponse | RlOptimizeResult;
+
 /** The engine's mutation-mode vocabulary (the route Literal's own set). */
 export const GA_MUTATION_LITERALS = [
   "uniform",
@@ -528,6 +592,49 @@ export const generativeApi = {
       };
     }
     return { mode: "job", job: parseJobView(raw["job"], "optimize(job)") };
+  },
+
+  /**
+   * `POST /api/v1/generative/rl-optimize` — GEN-3 (the roadmap's
+   * row 17): the REINVENT-style molecular RL optimizer over the REAL
+   * engine (the policy-gradient fine-tuning of a SMILES RNN prior
+   * against the scoring objective, with the prior-drift anchor and
+   * the experience-replay buffer) — a managed job with per-step
+   * telemetry and cancellation BETWEEN iterations, or sync.
+   */
+  async rlOptimize(
+    options: RlOptimizeOptions,
+  ): Promise<RlOptimizeResponse> {
+    const request: Record<string, unknown> = {
+      objective: options.objective,
+      prior_id: options.priorId ?? undefined,
+      smiles: options.smiles === null ? undefined : [...options.smiles],
+      prior_epochs: options.priorEpochs,
+      iterations: options.iterations,
+      batch_size: options.batchSize,
+      temperature: options.temperature,
+      lr: options.lr,
+      anchor_weight: options.anchorWeight,
+      entropy_bonus: options.entropyBonus,
+      replay_size: options.replaySize,
+      patience: options.patience,
+      max_smiles_length: options.maxSmilesLength,
+      seed: options.seed,
+      top_n: options.topN,
+      mode: options.mode ?? "job",
+    };
+    const raw = (await api.post(
+      "/api/v1/generative/rl-optimize",
+      request,
+    )) as Record<string, unknown>;
+    if (raw["mode"] === "sync") {
+      const parsed = parseRlOptimizeView(raw, "rl-optimize(sync)");
+      return parsed;
+    }
+    return {
+      mode: "job",
+      job: parseJobView(raw["job"], "rl-optimize(job)"),
+    };
   },
 
   /**
@@ -883,6 +990,76 @@ export function parseOptimizeResult(
 ): OptimizationView {
   const r = expectObject(raw, what);
   return parseOptimizationView(r["optimization"], `${what} optimization`);
+}
+
+/**
+ * GEN-3 — narrow the rl-optimize answer: the optimization block (the
+ * engine's own history rows with the drift diagnostics), the prior
+ * view (null on the on-the-fly lane), and the note.  The history
+ * rows' absent diagnostics stay null, never implied zeros.
+ */
+export function parseRlOptimizeView(
+  raw: unknown,
+  what: string,
+): RlOptimizeResult {
+  const r = expectObject(raw, what);
+  const optimizationRaw = r["optimization"];
+  if (typeof optimizationRaw !== "object" || optimizationRaw === null) {
+    throw new Error(`${what}: the optimization block is missing`);
+  }
+  const optimization = expectObject(optimizationRaw, `${what} optimization`);
+  const top = optimization["top"];
+  const historyRaw = optimization["history"];
+  const iterations = asNumber(optimization["iterations"]);
+  const note = r["note"];
+  if (iterations === null || typeof note !== "string") {
+    throw new Error(
+      `${what}: the optimization block lost its iterations/note`,
+    );
+  }
+  const history: RlIterationRow[] = [];
+  if (Array.isArray(historyRaw)) {
+    for (const rowRaw of historyRaw as unknown[]) {
+      const row = expectObject(rowRaw, `${what} history row`);
+      history.push({
+        iteration: asNumber(row["iteration"]) ?? 0,
+        best_score: asNumber(row["best_score"]),
+        mean_score: asNumber(row["mean_score"]),
+        valid_fraction: asNumber(row["valid_fraction"]),
+        drift: asNumber(row["drift"]),
+        entropy: asNumber(row["entropy"]),
+        loss: asNumber(row["loss"]),
+      });
+    }
+  }
+  const priorRaw = r["prior"];
+  const prior =
+    typeof priorRaw === "object" && priorRaw !== null
+      ? parsePriorView(priorRaw, `${what} prior`)
+      : null;
+  return {
+    mode: "sync",
+    optimization: {
+      best: typeof optimization["best"] === "string"
+        ? optimization["best"]
+        : null,
+      best_score: asNumber(optimization["best_score"]),
+      iterations,
+      history,
+      metadata:
+        typeof optimization["metadata"] === "object" &&
+        optimization["metadata"] !== null
+          ? (optimization["metadata"] as Record<string, unknown>)
+          : {},
+      top: Array.isArray(top)
+        ? top.map((row, i) =>
+            parseOptimizationTopRow(row, `${what} top[${i}]`),
+          )
+        : [],
+    },
+    prior,
+    note,
+  };
 }
 
 /** Narrow one `_optimize_body` answer (sync mode / the job result). */

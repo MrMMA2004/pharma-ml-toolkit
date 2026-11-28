@@ -31,33 +31,9 @@ data/
 !examples/data/**
 !tests/data/
 !tests/data/**
-# (r285 defect fix, carrier three) root-anchored: the bare `artifacts/`
-# pattern matched ANY directory named artifacts -- including
-# frontend/src/services/artifacts/ -- so every `git add -A` silently
-# skipped the services client and the r283 "rollback repair" never
-# durably landed in git (the remote's r284 tree still lacks the file
-# ml/dl/generative import). Only the toolkit root's own regenerated
-# artifacts output dir is ignored now; the frontend services lane is
-# tracked like any other source file.
-/artifacts/
-# (r287 close-out, the audit's third catch) the notebook-execution
-# output home: docking PDBQT/SDF/joblib products under
-# examples/artifacts/ are regenerable runtime products (the reexec
-# leaves them on disk; the zip build now anchors them out too) --
-# never tracked, exactly like /artifacts/ above.
-/examples/artifacts/
+artifacts/
 *.joblib
 *.xlsx
 
 # CatBoost training logs (created by compare_models runs)
 catboost_info/
-
-# Experiment-tracking runtime artifact (100x-173)
-experiments.jsonl
-core/
-core*
-
-# (r287) the notebook/e2e regenerated example-output home — generated
-# data, never source: it must not ride commits or release archives
-# (the audit287 excluded_paths close, matching tools/build_zip.py).
-examples/artifacts/

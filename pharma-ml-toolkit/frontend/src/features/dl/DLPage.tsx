@@ -41,12 +41,14 @@ import {
   parseTrainingMetricsPayload,
   parseGnnInlineGraphs,
   parseGnnTrainResult,
+  parseMpnnTrainResult,
   parseCnnTrainResult,
   parseAutoencoderTrainResult,
   type AutoencoderEncodeResponse,
   type AutoencoderTrainResult,
   type CnnPredictResponse,
   type CnnTrainResult,
+  type DLEfficiencyResult,
   type DLModelView,
   type DLNetworkName,
   type DLTrainOptionsTune,
@@ -58,6 +60,8 @@ import {
   type GnnPool,
   type GnnPredictResponse,
   type GnnTrainResult,
+  type MpnnPredictResponse,
+  type MpnnTrainResult,
   type NetworkCatalogEntry,
   type NetworkCatalogGnn,
   type TrainingMetricsPoint,
@@ -471,6 +475,70 @@ function GnnModelCard({ result }: { result: GnnTrainResult }) {
   );
 }
 
+/** DL-4 — the D-MPNN lane's result card: the held-out carve's own
+ *  verdicts (the roadmap's own validation step) + the honest
+ *  rejected-rows accounting. */
+function MpnnModelCard({ result }: { result: MpnnTrainResult }) {
+  const model = result.model;
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-[var(--color-foreground)]">{model.name}</span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {model.task}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          engine {model.engine}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          molecular model
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {model.model_id}
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {result.n_rows} molecules
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          {result.n_parameters} parameters
+        </span>
+        <span className="rounded-full bg-[var(--color-muted)] px-2 py-0.5 text-[11px] text-[var(--color-muted-foreground)]">
+          fit {model.fit_seconds.toFixed(2)} s
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-foreground)]">
+        held-out RMSE {result.val_rmse.toFixed(3)} over {result.val_n} rows ·{" "}
+        {result.val_correlation !== null
+          ? `correlation ${result.val_correlation.toFixed(3)}`
+          : "correlation n/a (the carve too small or degenerate — honestly null)"}
+        {" "}· train loss (tail){" "}
+        {result.train_history_tail.map((v) => v.toFixed(3)).join(" → ")}
+      </p>
+      {result.n_rejected > 0 ? (
+        <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+          {result.n_rejected} rejected row(s):{" "}
+          {result.rejected
+            .map((row) => `#${row.index} — ${row.error}`)
+            .join("; ")}
+        </p>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-1">
+        {Object.entries(model.best_params).map(([key, value]) => (
+          <span
+            key={key}
+            className="rounded bg-[var(--color-muted)] px-1.5 py-0.5 text-[10px] text-[var(--color-muted-foreground)]"
+          >
+            {key}: {formatValue(value)}
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+        {result.held_out_note}
+      </p>
+    </div>
+  );
+}
+
 /** DL-2 — one explained graph: the fidelity line + the edge table
  *  (top rows highlighted) + the sized-edge scatter over the
  *  backend's own circular layout. */
@@ -678,6 +746,18 @@ export function DLPage() {
   const [exportBusy, setExportBusy] = useState(false);
   const [digestStatus, setDigestStatus] = useState<string | null>(null);
 
+  // stage 11c: the efficiency lab (DL-3 — the roadmap's row 15, the
+  // weight engines' own lane over the trained tabular model)
+  const [efficiencyMode, setEfficiencyMode] = useState<
+    "quantize_int8" | "quantize_nf4" | "prune"
+  >("quantize_int8");
+  const [efficiencyLevelText, setEfficiencyLevelText] = useState("0.5");
+  const [efficiencyScope, setEfficiencyScope] = useState<"local" | "global">("local");
+  const [efficiencyResult, setEfficiencyResult] = useState<DLEfficiencyResult | null>(null);
+  const [efficiencyError, setEfficiencyError] = useState<string | null>(null);
+  const [efficiencyBusy, setEfficiencyBusy] = useState(false);
+  const [efficiencyDigestStatus, setEfficiencyDigestStatus] = useState<string | null>(null);
+
   // the GNN/MPNN lane (part13 Phase 5 — the graph models' own lane,
   // parallel to the tabular §11.3 chain above)
   const [gnnSource, setGnnSource] = useState<"synthetic" | "inline">("synthetic");
@@ -755,6 +835,27 @@ export function DLPage() {
   const [aeEncodeBusy, setAeEncodeBusy] = useState(false);
   const [aeEncodeError, setAeEncodeError] = useState<string | null>(null);
   const [aeEncodeResult, setAeEncodeResult] = useState<AutoencoderEncodeResponse | null>(null);
+
+  // the D-MPNN lane (DL-4 — the roadmap's row 16: the molecular
+  // property predictor over a registered dataset's own SMILES column;
+  // its own dataset pick so the tabular chain's selection stands alone)
+  const [mpnnDatasetId, setMpnnDatasetId] = useState<string | null>(null);
+  const [mpnnView, setMpnnView] = useState<DatasetView | null>(null);
+  const [mpnnViewError, setMpnnViewError] = useState<string | null>(null);
+  const [mpnnSmilesColumn, setMpnnSmilesColumn] = useState<string>("");
+  const [mpnnHidden, setMpnnHidden] = useState(32);
+  const [mpnnDepth, setMpnnDepth] = useState(3);
+  const [mpnnEpochs, setMpnnEpochs] = useState(200);
+  const [mpnnLr, setMpnnLr] = useState(0.02);
+  const [mpnnSeed, setMpnnSeed] = useState(0);
+  const [mpnnTrainBusy, setMpnnTrainBusy] = useState(false);
+  const [mpnnTrainJobId, setMpnnTrainJobId] = useState<string | null>(null);
+  const [mpnnTrainError, setMpnnTrainError] = useState<string | null>(null);
+  const [mpnnTrainResult, setMpnnTrainResult] = useState<MpnnTrainResult | null>(null);
+  const [mpnnPredictText, setMpnnPredictText] = useState("");
+  const [mpnnPredictBusy, setMpnnPredictBusy] = useState(false);
+  const [mpnnPredictError, setMpnnPredictError] = useState<string | null>(null);
+  const [mpnnPredictResult, setMpnnPredictResult] = useState<MpnnPredictResponse | null>(null);
 
   // the tabular Transformer's architecture controls (part18 §5.4 — the
   // family rides the SAME tabular train lane, its own keys compose here)
@@ -1195,6 +1296,61 @@ export function DLPage() {
     }
   }, [exportArtifact, verifiedDownload]);
 
+  // stage 11c: the efficiency lab (DL-3 — the roadmap's row 15).
+  // The honest pre-flight mirrors the route's own guards: the prune
+  // lane's level must PARSE and land in [0, 1) (never a silent
+  // default), the quantize lanes never carry one; only then does the
+  // request ride.  The report renders per-layer with the mode's own
+  // fields, and the artifact downloads through the same
+  // digest-verified lane every other artifact rides.
+  const handleEfficiency = useCallback(async () => {
+    if (trainedModel === null) {
+      return;
+    }
+    let level: number | null = null;
+    if (efficiencyMode === "prune") {
+      const parsed = Number(efficiencyLevelText);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed >= 1) {
+        setEfficiencyError(
+          `the prune lane's level must land in [0, 1) — "${efficiencyLevelText}" does not parse there`,
+        );
+        return;
+      }
+      level = parsed;
+    }
+    setEfficiencyBusy(true);
+    setEfficiencyError(null);
+    setEfficiencyResult(null);
+    setEfficiencyDigestStatus(null);
+    try {
+      const result = await dlApi.efficiency({
+        modelId: trainedModel.model_id,
+        mode: efficiencyMode,
+        level,
+        scope: efficiencyScope,
+        artifact: true,
+      });
+      setEfficiencyResult(result);
+    } catch (error) {
+      setEfficiencyError(describeError(error));
+    } finally {
+      setEfficiencyBusy(false);
+    }
+  }, [trainedModel, efficiencyMode, efficiencyLevelText, efficiencyScope]);
+
+  const handleEfficiencyDownload = useCallback(async () => {
+    const artifact = efficiencyResult?.artifact ?? null;
+    if (artifact === null) {
+      return;
+    }
+    setEfficiencyDigestStatus(null);
+    try {
+      setEfficiencyDigestStatus(await verifiedDownload(artifact));
+    } catch (error) {
+      setEfficiencyDigestStatus(describeError(error));
+    }
+  }, [efficiencyResult, verifiedDownload]);
+
   // the GNN lane's train (job mode — the graph trainer's own lane):
   // the inline block parses + validates client-side BEFORE any
   // request; the synthetic fixture rides the backend's own generator
@@ -1294,6 +1450,97 @@ export function DLPage() {
       setGnnPredictBusy(false);
     }
   }, [gnnTrainResult, gnnPredictText, gnnPredictProba]);
+
+  // DL-4: the D-MPNN lane's own dataset pick — the molecular lane
+  // reads a registered dataset's own SMILES column (its own selection
+  // so the tabular chain's selected dataset stands untouched)
+  const handleMpnnDatasetPick = useCallback(async (datasetId: string) => {
+    setMpnnDatasetId(datasetId);
+    setMpnnView(null);
+    setMpnnViewError(null);
+    setMpnnSmilesColumn("");
+    try {
+      const view = await datasetsApi.view(datasetId);
+      setMpnnView(view);
+    } catch (error) {
+      setMpnnViewError(describeError(error));
+    }
+  }, []);
+
+  // DL-4: the D-MPNN train — the REAL numpy chemprop-style engine
+  // over the dataset's own SMILES column (job mode with HONEST
+  // stage-level telemetry; the held-out carve rides the result)
+  const handleMpnnTrain = useCallback(async () => {
+    if (mpnnDatasetId === null || mpnnSmilesColumn === "") {
+      return;
+    }
+    setMpnnTrainBusy(true);
+    setMpnnTrainError(null);
+    setMpnnTrainJobId(null);
+    setMpnnTrainResult(null);
+    try {
+      const response = await dlApi.mpnnTrain({
+        datasetId: mpnnDatasetId,
+        smilesColumn: mpnnSmilesColumn,
+        hiddenSize: mpnnHidden,
+        depth: mpnnDepth,
+        epochs: mpnnEpochs,
+        lr: mpnnLr,
+        seed: mpnnSeed,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setMpnnTrainJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setMpnnTrainError(describeError(error));
+    } finally {
+      setMpnnTrainBusy(false);
+    }
+  }, [mpnnDatasetId, mpnnSmilesColumn, mpnnHidden, mpnnDepth, mpnnEpochs, mpnnLr, mpnnSeed]);
+
+  // the mpnn-train job's COMPLETED result is the full train body —
+  // the authoritative REST relay, parsed at runtime
+  const handleMpnnTrainResult = useCallback((result: unknown) => {
+    try {
+      setMpnnTrainResult(parseMpnnTrainResult(result, "dl mpnn-train result"));
+    } catch (error) {
+      setMpnnTrainError(describeError(error));
+    }
+  }, []);
+
+  // DL-4: the molecular models' OWN prediction path over raw SMILES
+  // (one per line; the honest pre-flight: the block needs at least
+  // one non-empty line before any request rides)
+  const handleMpnnPredict = useCallback(async () => {
+    if (mpnnTrainResult === null) {
+      return;
+    }
+    setMpnnPredictBusy(true);
+    setMpnnPredictError(null);
+    setMpnnPredictResult(null);
+    try {
+      const smiles = mpnnPredictText
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      if (smiles.length === 0) {
+        throw new Error(
+          "the predict lane needs at least one SMILES line — one per row",
+        );
+      }
+      setMpnnPredictResult(
+        await dlApi.mpnnPredict({
+          modelId: mpnnTrainResult.model.model_id,
+          smiles,
+        }),
+      );
+    } catch (error) {
+      setMpnnPredictError(describeError(error));
+    } finally {
+      setMpnnPredictBusy(false);
+    }
+  }, [mpnnTrainResult, mpnnPredictText]);
 
   // DL-2: the edge-attribution lane — the same inline-graphs paste
   // the predict card rides, through the gnnxai engine; the
@@ -2669,6 +2916,205 @@ export function DLPage() {
                   <p className="mt-2 text-xs font-medium text-[var(--color-foreground)]">{digestStatus}</p>
                 ) : null}
               </div>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold text-[var(--color-foreground)]">
+                  Efficiency lab (DL-3 — quantization / pruning reports)
+                </p>
+                <div className="mt-2 flex flex-wrap items-end gap-2">
+                  <label className="text-xs text-[var(--color-muted-foreground)]">
+                    mode
+                    <select
+                      aria-label="the efficiency mode"
+                      value={efficiencyMode}
+                      onChange={(event) =>
+                        setEfficiencyMode(
+                          event.target.value as
+                            | "quantize_int8"
+                            | "quantize_nf4"
+                            | "prune",
+                        )
+                      }
+                      className="mt-1 w-36 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                    >
+                      <option value="quantize_int8">quantize_int8</option>
+                      <option value="quantize_nf4">quantize_nf4</option>
+                      <option value="prune">prune</option>
+                    </select>
+                  </label>
+                  {efficiencyMode === "prune" ? (
+                    <>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        level (sparsity)
+                        <input
+                          type="number"
+                          min={0}
+                          max={0.99}
+                          step={0.05}
+                          value={efficiencyLevelText}
+                          onChange={(event) =>
+                            setEfficiencyLevelText(event.target.value)
+                          }
+                          className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                        />
+                      </label>
+                      <label className="text-xs text-[var(--color-muted-foreground)]">
+                        scope
+                        <select
+                          aria-label="the pruning scope"
+                          value={efficiencyScope}
+                          onChange={(event) =>
+                            setEfficiencyScope(
+                              event.target.value as "local" | "global",
+                            )
+                          }
+                          className="mt-1 w-24 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                        >
+                          <option value="local">local</option>
+                          <option value="global">global</option>
+                        </select>
+                      </label>
+                    </>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    disabled={trainedModel === null || efficiencyBusy}
+                    onClick={() => void handleEfficiency()}
+                  >
+                    {efficiencyBusy ? "Measuring…" : "Run the efficiency pass"}
+                  </Button>
+                  {efficiencyResult?.artifact != null ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleEfficiencyDownload()}
+                    >
+                      <ArrowDownToLine aria-hidden className="h-4 w-4" />
+                      Download {efficiencyResult.artifact.filename}
+                    </Button>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+                  `POST /api/v1/dl/efficiency` — the trained network&apos;s
+                  own weight matrices through the REAL engines: int8 absmax
+                  or the NF4 block pack (the engine&apos;s own report:
+                  bits/weight, RMSE, relative error, the honest memory line)
+                  or magnitude pruning (local/global masks, the metric delta
+                  scored on the model&apos;s own training rows through a
+                  pruned COPY — the persisted estimator is never mutated).
+                  The report registers as a downloadable table artifact.
+                </p>
+                {trainedModel === null ? (
+                  <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                    Train a network in stage 6 first — the efficiency lab
+                    reads the trained model&apos;s own weight matrices.
+                  </p>
+                ) : null}
+                {efficiencyError !== null ? (
+                  <div className="mt-2">
+                    <ErrorBanner message={efficiencyError} />
+                  </div>
+                ) : null}
+                {efficiencyResult !== null ? (
+                  <div className="mt-3">
+                    <p className="text-xs font-medium text-[var(--color-foreground)]">
+                      {efficiencyResult.efficiencyMode === "prune" ? (
+                        <>
+                          target sparsity{" "}
+                          {efficiencyResult.targetSparsity?.toFixed(2)} ·{" "}
+                          achieved{" "}
+                          {(efficiencyResult.achievedSparsity ?? 0).toFixed(3)}{" "}
+                          ({efficiencyResult.nZeroed} of{" "}
+                          {efficiencyResult.nWeights} weights zeroed) · scope{" "}
+                          {efficiencyResult.scope}
+                          {efficiencyResult.metric?.before != null &&
+                          efficiencyResult.metric?.after != null ? (
+                            <>
+                              {" "}· score{" "}
+                              {efficiencyResult.metric.before.toFixed(3)} →{" "}
+                              {efficiencyResult.metric.after.toFixed(3)} (Δ{" "}
+                              {(efficiencyResult.metric.after - efficiencyResult.metric.before).toFixed(3)})
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          method {efficiencyResult.method} · mean{" "}
+                          {efficiencyResult.bitsPerWeight?.toFixed(2)}{" "}
+                          bits/weight · memory{" "}
+                          {(100 * (efficiencyResult.memorySavings ?? 0)).toFixed(1)}%
+                          saved ({efficiencyResult.originalBits} →{" "}
+                          {efficiencyResult.quantizedBits} bits over{" "}
+                          {efficiencyResult.nWeights} weights)
+                        </>
+                      )}
+                    </p>
+                    <div className="mt-2 max-h-72 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-[var(--color-muted)]">
+                          <tr className="text-left text-[var(--color-muted-foreground)]">
+                            <th scope="col" className="px-3 py-2">layer</th>
+                            <th scope="col" className="px-3 py-2">shape</th>
+                            <th scope="col" className="px-3 py-2">weights</th>
+                            {efficiencyResult.efficiencyMode === "prune" ? (
+                              <>
+                                <th scope="col" className="px-3 py-2">zeroed</th>
+                                <th scope="col" className="px-3 py-2">kept</th>
+                                <th scope="col" className="px-3 py-2">sparsity</th>
+                              </>
+                            ) : (
+                              <>
+                                <th scope="col" className="px-3 py-2">bits/w</th>
+                                <th scope="col" className="px-3 py-2">rmse</th>
+                                <th scope="col" className="px-3 py-2">rel err</th>
+                              </>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {efficiencyResult.layers.map((row) => (
+                            <tr
+                              key={row.layer}
+                              className="border-t border-[var(--color-border)] text-[var(--color-foreground)]"
+                            >
+                              <td className="px-3 py-1.5 font-mono">{row.layer}</td>
+                              <td className="px-3 py-1.5">{row.shape.join("×")}</td>
+                              <td className="px-3 py-1.5">{row.nWeights}</td>
+                              {row.kind === "prune" ? (
+                                <>
+                                  <td className="px-3 py-1.5">{row.nZeroed}</td>
+                                  <td className="px-3 py-1.5">{row.nKept}</td>
+                                  <td className="px-3 py-1.5">{row.sparsity.toFixed(3)}</td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="px-3 py-1.5">{row.bitsPerWeight.toFixed(2)}</td>
+                                  <td className="px-3 py-1.5">{row.rmse.toPrecision(3)}</td>
+                                  <td className="px-3 py-1.5">{row.relativeError.toPrecision(3)}</td>
+                                </>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+                      {efficiencyResult.note}
+                    </p>
+                    {efficiencyResult.artifact !== null ? (
+                      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                        artifact {efficiencyResult.artifact.artifact_id} ·{" "}
+                        {efficiencyResult.artifact.size_bytes} bytes · sha256{" "}
+                        {efficiencyResult.artifact.sha256.slice(0, 16)}…
+                      </p>
+                    ) : null}
+                    {efficiencyDigestStatus !== null ? (
+                      <p className="mt-1 text-xs font-medium text-[var(--color-foreground)]">
+                        {efficiencyDigestStatus}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -3158,6 +3604,277 @@ export function DLPage() {
                 </p>
               </>
             )}
+          </CardContent>
+        </Card>
+
+      </section>
+
+      {/*
+       * The D-MPNN lane — DL-4 (the roadmap's row 16): the molecular
+       * property predictor over a registered dataset's own SMILES
+       * column — "give a SMILES column, get a property model" — with
+       * the molecular models' OWN predict path over raw SMILES.
+       */}
+      <section className="mt-12" aria-labelledby="mpnn-lane-title">
+        <div className="flex flex-wrap items-baseline gap-2 border-t border-[var(--color-border)] pt-6">
+          <h2
+            id="mpnn-lane-title"
+            className="text-lg font-semibold text-[var(--color-foreground)]"
+          >
+            D-MPNN — the molecular lane
+          </h2>
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            DL-4 · the REAL numpy chemprop-style directed message passing —
+            SMILES in, property out
+          </span>
+        </div>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Train over a SMILES column</CardTitle>
+            <CardDescription>
+              `/api/v1/dl/mpnn-train` — the registered dataset&apos;s own
+              SMILES column re-read server-side, the honest rejected-rows
+              accounting, the seeded held-out carve, the shipped model as the
+              full-corpus refit
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                dataset
+                <select
+                  aria-label="the molecular lane's dataset"
+                  value={mpnnDatasetId ?? ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value !== "") {
+                      void handleMpnnDatasetPick(value);
+                    } else {
+                      setMpnnDatasetId(null);
+                      setMpnnView(null);
+                      setMpnnSmilesColumn("");
+                    }
+                  }}
+                  className="mt-1 block w-48 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                >
+                  <option value="">— pick a dataset —</option>
+                  {datasets.map((row) => (
+                    <option key={row.dataset_id} value={row.dataset_id}>
+                      {row.name} · {row.shape[0]} rows
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                SMILES column
+                <select
+                  aria-label="the SMILES column"
+                  value={mpnnSmilesColumn}
+                  onChange={(event) => setMpnnSmilesColumn(event.target.value)}
+                  className="mt-1 block w-36 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                >
+                  <option value="">— pick —</option>
+                  {(mpnnView?.columns ?? [])
+                    .filter((column) => column !== mpnnView?.target)
+                    .map((column) => (
+                      <option key={column} value={column}>
+                        {column}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                hidden
+                <input
+                  type="number"
+                  min={1}
+                  max={512}
+                  value={mpnnHidden}
+                  onChange={(event) => setMpnnHidden(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                depth
+                <input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={mpnnDepth}
+                  onChange={(event) => setMpnnDepth(Number(event.target.value))}
+                  className="mt-1 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                epochs
+                <input
+                  type="number"
+                  min={1}
+                  max={2000}
+                  value={mpnnEpochs}
+                  onChange={(event) => setMpnnEpochs(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                lr
+                <input
+                  type="number"
+                  min={0.0001}
+                  max={1}
+                  step={0.001}
+                  value={mpnnLr}
+                  onChange={(event) => setMpnnLr(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed
+                <input
+                  type="number"
+                  min={0}
+                  value={mpnnSeed}
+                  onChange={(event) => setMpnnSeed(Number(event.target.value))}
+                  className="mt-1 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <Button
+                size="sm"
+                disabled={
+                  mpnnDatasetId === null ||
+                  mpnnSmilesColumn === "" ||
+                  mpnnTrainBusy ||
+                  (mpnnView !== null && mpnnView.task !== "regression")
+                }
+                onClick={() => void handleMpnnTrain()}
+              >
+                {mpnnTrainBusy ? "Submitting…" : "Train the molecular model"}
+              </Button>
+            </div>
+            {mpnnView !== null && mpnnView.task !== "regression" ? (
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                this dataset&apos;s task is {mpnnView.task} — the D-MPNN is a
+                regressor; the lane needs a regression target (the route&apos;s
+                own refusal)
+              </p>
+            ) : null}
+            {mpnnViewError !== null ? (
+              <div className="mt-2">
+                <ErrorBanner message={mpnnViewError} />
+              </div>
+            ) : null}
+            {mpnnTrainError !== null ? (
+              <div className="mt-2">
+                <ErrorBanner message={mpnnTrainError} />
+              </div>
+            ) : null}
+            {mpnnTrainJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={mpnnTrainJobId}
+                  resultLabel="the trained D-MPNN model view"
+                  onResult={handleMpnnTrainResult}
+                />
+              </div>
+            ) : null}
+            {mpnnTrainResult !== null ? <MpnnModelCard result={mpnnTrainResult} /> : null}
+            <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              The lane rides `POST /api/v1/dl/mpnn-train` in job mode — the
+              REAL `DMPNN` fit (chemprop&apos;s directed message passing over
+              the house graphs) with stage-level progress only (assembling
+              → the carve → the refit) — the per-iteration history lands
+              AFTER the run, never a fabricated epoch stream: the held-out
+              carve&apos;s RMSE and correlation ride the result, the shipped
+              model is the FULL-corpus refit, and every unparseable row
+              rides its own rejection accounting (never dropped silently).
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">Predict on molecules</CardTitle>
+            <CardDescription>
+              the molecular models&apos; OWN prediction path —
+              `/api/v1/dl/mpnn-predict` over raw SMILES (never the tabular
+              `/api/v1/ml/predict`)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <label className="block text-xs text-[var(--color-muted-foreground)]">
+              SMILES (one per line)
+              <textarea
+                aria-label="the SMILES to predict"
+                rows={4}
+                value={mpnnPredictText}
+                onChange={(event) => setMpnnPredictText(event.target.value)}
+                placeholder={"CCO\nCCN\nc1ccccc1"}
+                className="mt-1 block w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 font-mono text-xs"
+              />
+            </label>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                disabled={mpnnTrainResult === null || mpnnPredictBusy}
+                onClick={() => void handleMpnnPredict()}
+              >
+                {mpnnPredictBusy ? "Predicting…" : "Predict the properties"}
+              </Button>
+              {mpnnTrainResult === null ? (
+                <span className="text-xs text-[var(--color-muted-foreground)]">
+                  train a molecular model above first
+                </span>
+              ) : null}
+            </div>
+            {mpnnPredictError !== null ? (
+              <div className="mt-2">
+                <ErrorBanner message={mpnnPredictError} />
+              </div>
+            ) : null}
+            {mpnnPredictResult !== null ? (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-[var(--color-foreground)]">
+                  {mpnnPredictResult.n_valid} prediction(s) ·{" "}
+                  {mpnnPredictResult.n_rejected} rejected
+                </p>
+                <div className="mt-2 max-h-64 overflow-y-auto rounded-md border border-[var(--color-border)]">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[var(--color-muted)]">
+                      <tr className="text-left text-[var(--color-muted-foreground)]">
+                        <th scope="col" className="px-3 py-2">row</th>
+                        <th scope="col" className="px-3 py-2">SMILES</th>
+                        <th scope="col" className="px-3 py-2">prediction</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mpnnPredictResult.predictions.map((row) => (
+                        <tr
+                          key={row.index}
+                          className="border-t border-[var(--color-border)] text-[var(--color-foreground)]"
+                        >
+                          <td className="px-3 py-1.5">{row.index}</td>
+                          <td className="px-3 py-1.5 font-mono">{row.smiles}</td>
+                          <td className="px-3 py-1.5">{row.prediction.toFixed(3)}</td>
+                        </tr>
+                      ))}
+                      {mpnnPredictResult.rejected.map((row) => (
+                        <tr
+                          key={`rejected-${row.index}`}
+                          className="border-t border-[var(--color-border)] text-[var(--color-muted-foreground)]"
+                        >
+                          <td className="px-3 py-1.5">{row.index}</td>
+                          <td className="px-3 py-1.5 font-mono">
+                            {row.smiles ?? "—"}
+                          </td>
+                          <td className="px-3 py-1.5">rejected: {row.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

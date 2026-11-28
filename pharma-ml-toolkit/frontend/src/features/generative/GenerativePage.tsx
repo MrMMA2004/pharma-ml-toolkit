@@ -45,11 +45,13 @@ import {
   parseIterationUpdatePayload,
   parseOptimizeResult,
   parsePriorTrainResult,
+  parseRlOptimizeView,
   parseTrainingMetricsPayload,
   type GenerationMetricsResult,
   type ObjectiveCatalogEntry,
   type OptimizationView,
   type PriorView,
+  type RlOptimizeResult,
   type SampleResponse,
   type TrainingMetricsPayload,
   type IterationUpdatePayload,
@@ -58,6 +60,10 @@ import {
   type FeaturePriorView,
   type FeatureSampleResponse,
 } from "@/services/generative/client";
+import {
+  PlotlyFigure,
+  type PlotTrace,
+} from "@/components/charts/PlotlyFigure";
 
 /**
  * The Generative AI workspace — part11 §11.4's complete sequential
@@ -101,7 +107,7 @@ const TABLE_EXPORT_MAX_ROWS = 5000;
 /** The chemistry engine's own request cap (chemistry.py's max_length). */
 const CHEMISTRY_MAX_SMILES = 500;
 
-type GenerationMethod = "prior-sample" | "optimize";
+type GenerationMethod = "prior-sample" | "optimize" | "rl-optimize";
 
 /** One working-set molecule — the unified row both engines produce. */
 interface WorkingRow {
@@ -356,6 +362,18 @@ export function GenerativePage() {
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
   const [optimizeBusy, setOptimizeBusy] = useState(false);
   const [iterations, setIterations] = useState<readonly IterationUpdatePayload[]>([]);
+
+  // the RL lane (GEN-3 — the roadmap's row 17: the REINVENT-style
+  // optimizer over a session prior or the engine's own on-the-fly one)
+  const [rlPriorId, setRlPriorId] = useState<string>("");
+  const [rlIterations, setRlIterations] = useState(30);
+  const [rlBatchSize, setRlBatchSize] = useState(32);
+  const [rlSeed, setRlSeed] = useState(42);
+  const [rlTopN, setRlTopN] = useState(20);
+  const [rlBusy, setRlBusy] = useState(false);
+  const [rlJobId, setRlJobId] = useState<string | null>(null);
+  const [rlError, setRlError] = useState<string | null>(null);
+  const [rlResult, setRlResult] = useState<RlOptimizeResult | null>(null);
 
   // the unified working set (both engines land here)
   const [workingSet, setWorkingSet] = useState<readonly WorkingRow[]>([]);
@@ -824,6 +842,63 @@ export function GenerativePage() {
       );
     } catch (error) {
       setOptimizeError(describeError(error));
+    }
+  }, []);
+
+  // GEN-3: the RL optimizer — the REINVENT-style lane over a session
+  // prior or the engine's own on-the-fly prior (job mode with
+  // per-step telemetry + cancellation BETWEEN iterations)
+  const handleRlOptimize = useCallback(async () => {
+    setRlBusy(true);
+    setRlError(null);
+    setRlJobId(null);
+    setRlResult(null);
+    setWorkingSet([]);
+    try {
+      const response = await generativeApi.rlOptimize({
+        objective: objectiveSpec,
+        priorId: rlPriorId === "" ? null : rlPriorId,
+        smiles: null,
+        iterations: rlIterations,
+        batchSize: rlBatchSize,
+        priorEpochs: 8,
+        temperature: 0.9,
+        lr: 0.003,
+        anchorWeight: 0.1,
+        entropyBonus: 0.02,
+        replaySize: 64,
+        patience: 5,
+        maxSmilesLength: 120,
+        seed: rlSeed,
+        topN: rlTopN,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setRlJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setRlError(describeError(error));
+    } finally {
+      setRlBusy(false);
+    }
+  }, [objectiveSpec, rlPriorId, rlIterations, rlBatchSize, rlSeed, rlTopN]);
+
+  const handleRlOptimizeResult = useCallback((result: unknown) => {
+    try {
+      const rl = parseRlOptimizeView(result, "generative rl-optimize result");
+      setRlResult(rl);
+      setWorkingSet(
+        rl.optimization.top.map((row) => ({
+          smiles: row.smiles,
+          score: row.score,
+          breakdown: row.breakdown,
+        })),
+      );
+      setWorkingSetLabel(
+        `the RL run's top ${rl.optimization.top.length} molecules`,
+      );
+    } catch (error) {
+      setRlError(describeError(error));
     }
   }, []);
 
@@ -1366,7 +1441,7 @@ export function GenerativePage() {
         hint="the backend's two REAL engines + the live objective catalog"
         icon={<Sparkles aria-hidden className="h-4 w-4" />}
       >
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {(
             [
               {
@@ -1380,6 +1455,12 @@ export function GenerativePage() {
                 title: "Genetic optimization",
                 description:
                   "GeneticOptimizer over the scoring catalog's own objective — the evolution's per-generation iteration.update telemetry, native cancellation, and its ranked top molecules.",
+              },
+              {
+                id: "rl-optimize" as GenerationMethod,
+                title: "RL optimization (REINVENT-style)",
+                description:
+                  "run_rl_optimization — the policy-gradient fine-tuning of a SMILES RNN prior against the scoring objective, with the prior-drift anchor and the experience-replay buffer; a session prior or the engine's own on-the-fly prior.",
               },
             ] as const
           ).map((entry) => (
@@ -2165,6 +2246,192 @@ export function GenerativePage() {
                 with the registered prior view.
               </p>
             )}
+          </>
+        ) : method === "rl-optimize" ? (
+          <>
+            {rlError !== null ? <ErrorBanner message={rlError} /> : null}
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                prior
+                <select
+                  aria-label="the RL lane's prior"
+                  value={rlPriorId}
+                  onChange={(event) => setRlPriorId(event.target.value)}
+                  className="mt-1 block w-44 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                >
+                  <option value="">
+                    the engine&apos;s own (on-the-fly, DEFAULT_CORPUS)
+                  </option>
+                  {priors.map((prior) => (
+                    <option key={prior.prior_id} value={prior.prior_id}>
+                      {prior.name} · {prior.n_train_smiles} SMILES
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                iterations
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={rlIterations}
+                  aria-label="rl iterations"
+                  onChange={(event) =>
+                    setRlIterations(Number(event.target.value))
+                  }
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                batch
+                <input
+                  type="number"
+                  min={4}
+                  max={256}
+                  value={rlBatchSize}
+                  aria-label="rl batch"
+                  onChange={(event) =>
+                    setRlBatchSize(Number(event.target.value))
+                  }
+                  className="mt-1 w-20 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                seed
+                <input
+                  type="number"
+                  min={0}
+                  value={rlSeed}
+                  aria-label="rl seed"
+                  onChange={(event) => setRlSeed(Number(event.target.value))}
+                  className="mt-1 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <label className="text-xs text-[var(--color-muted-foreground)]">
+                top_n
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={rlTopN}
+                  aria-label="rl top_n"
+                  onChange={(event) => setRlTopN(Number(event.target.value))}
+                  className="mt-1 w-16 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                />
+              </label>
+              <Button
+                onClick={() => void handleRlOptimize()}
+                disabled={rlBusy || rlJobId !== null}
+              >
+                {rlBusy ? "submitting…" : "Run the RL optimization"}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[var(--color-muted-foreground)]">
+              POST /api/v1/generative/rl-optimize (job mode) — the REAL
+              REINVENT-style engine: the policy-gradient fine-tuning of the
+              prior against the objective spec, with the prior-drift anchor
+              and the experience-replay buffer; cancellation lands BETWEEN
+              iterations (the population-route precedent).
+            </p>
+            {rlJobId !== null ? (
+              <div className="mt-3">
+                <JobRunCard
+                  jobId={rlJobId}
+                  resultLabel="the RL optimization view relay"
+                  onResult={handleRlOptimizeResult}
+                />
+              </div>
+            ) : null}
+            {rlResult !== null ? (
+              <Card className="mt-3">
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    The RL run&apos;s verdict
+                  </CardTitle>
+                  <CardDescription>
+                    best {formatValue(rlResult.optimization.best)} · score{" "}
+                    {formatValue(rlResult.optimization.best_score)} ·{" "}
+                    {rlResult.optimization.iterations} iterations ·{" "}
+                    {rlResult.optimization.top.length} ranked molecules
+                    {rlResult.prior !== null
+                      ? ` · session prior ${rlResult.prior.prior_id}`
+                      : ""}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-h-48 overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead className="sticky top-0 bg-[var(--color-muted)]">
+                        <tr className="text-left font-semibold text-[var(--color-foreground)]">
+                          <th scope="col" className="px-3 py-2">#</th>
+                          <th scope="col" className="px-3 py-2">SMILES</th>
+                          <th scope="col" className="px-3 py-2">score</th>
+                          <th scope="col" className="px-3 py-2">breakdown</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rlResult.optimization.top.map((row, i) => (
+                          <tr
+                            key={`${row.smiles}-${i}`}
+                            className="border-t border-[var(--color-border)]"
+                          >
+                            <td className="px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                              {i + 1}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[var(--color-foreground)]">
+                              {row.smiles}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-1.5 text-[var(--color-muted-foreground)]">
+                              {formatValue(row.score)}
+                            </td>
+                            <td className="px-3 py-1.5 text-[10px] text-[var(--color-muted-foreground)]">
+                              {Object.entries(row.breakdown)
+                                .map(([k, v]) => `${k}=${formatValue(v)}`)
+                                .join(" · ")}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs font-semibold text-[var(--color-foreground)]">
+                      the per-iteration step curve (mean + best score)
+                    </p>
+                    <PlotlyFigure
+                      data={[
+                        {
+                          name: "mean score",
+                          x: rlResult.optimization.history.map(
+                            (row) => row.iteration + 1,
+                          ),
+                          y: rlResult.optimization.history.map(
+                            (row) => row.mean_score,
+                          ),
+                          mode: "lines+markers",
+                        },
+                        {
+                          name: "best score",
+                          x: rlResult.optimization.history.map(
+                            (row) => row.iteration + 1,
+                          ),
+                          y: rlResult.optimization.history.map(
+                            (row) => row.best_score,
+                          ),
+                          mode: "lines+markers",
+                        },
+                      ] as PlotTrace[]}
+                      layout={{
+                        xaxis: { title: "RL iteration" },
+                        yaxis: { title: "objective score" },
+                      }}
+                      ariaLabel="the RL run's per-iteration step curve"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
           </>
         ) : (
           <>

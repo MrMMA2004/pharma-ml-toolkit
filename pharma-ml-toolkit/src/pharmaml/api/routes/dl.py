@@ -70,19 +70,37 @@ The GNN/MPNN lane (part13 Phase 5's first item — the API leg):
   up front; the attention lane refuses non-GAT models with the
   engine's own message.  Sync by design (masked forward passes,
   seconds per explained graph).
+* ``POST /api/v1/dl/efficiency`` — DL-3 (the roadmap's row 15): the
+  efficiency lab over the REAL weight engines
+  (``pharmaml.ml.quantization`` + ``pharmaml.ml.pruning``): the
+  persisted tabular estimator's own 2-D weight matrices read off its
+  ``_weights`` dict (the pickle-portable source of truth — exactly
+  what a stage-11 checkpoint carries), quantized (int8 absmax or the
+  QLoRA NF4 block pack with double-quantized scales) through the
+  engine's own ``quantization_report`` (bits per weight, RMSE,
+  relative error, the honest memory line over the float32 baseline)
+  or magnitude-pruned (the engine's own local/global masks at a
+  target sparsity, with the metric delta scored on the model's own
+  training dataset through a pruned COPY — the persisted estimator
+  is never mutated).  The report registers as a downloadable table
+  artifact.  Sync by design (one matrix sweep per mode).
 """
 
 from __future__ import annotations
 
+import copy
 import inspect
 import math
+import tempfile
 import time
 import uuid
 from collections.abc import Callable
 from functools import partial
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -118,16 +136,20 @@ from pharmaml.ml.hpo import (
     IntParam,
     SearchSpace,
 )
+from pharmaml.ml.mpnn import DMPNN
 from pharmaml.ml.neural import (
     DeepMLPClassifier,
     DeepMLPRegressor,
     ResidualMLPClassifier,
     ResidualMLPRegressor,
 )
+from pharmaml.ml.pruning import count_sparsity, magnitude_mask
+from pharmaml.ml.quantization import quantization_report
 from pharmaml.ml.transformer import (
     TabularTransformerClassifier,
     TabularTransformerRegressor,
 )
+from pharmaml.viz.report import export_table
 
 from ..events import EventType
 from ..jobs import CancelledJob
@@ -1574,5 +1596,704 @@ def gnn_explain(req: GnnExplainRequest, request: Request) -> dict:
             "edges are removed, fidelity_minus the drop when only they "
             "remain; the layout is the deterministic circular node "
             "position (the sized-edge scatter's canvas)"
+        ),
+    }
+
+
+# -- DL-3: the efficiency lab (the roadmap's row 15) ------------------------
+
+#: the route's mode tokens -> the quantization engine's own method
+#: tokens (one vocabulary translation, never a second engine)
+_EFFICIENCY_QUANT_METHODS: dict[str, str] = {
+    "quantize_int8": "int8",
+    "quantize_nf4": "nf4",
+}
+
+
+class DLEfficiencyRequest(BaseModel):
+    """POST /api/v1/dl/efficiency — DL-3's weight-efficiency body."""
+
+    model_id: str
+    mode: Literal["quantize_int8", "quantize_nf4", "prune"]
+    # the prune lane's target sparsity (the magnitude engine's own
+    # [0, 1) domain); REQUIRED on prune, refused on the quantize lanes
+    # (the level knob rides the prune lane only — a 422, never a
+    # silent skip)
+    level: float | None = Field(default=None, ge=0.0, lt=1.0)
+    # the magnitude engine's own scope vocabulary (prune only)
+    scope: Literal["local", "global"] = "local"
+    # the report rides as a downloadable table artifact (the
+    # roadmap's own "register the report as a table artifact")
+    artifact: bool = True
+
+
+def _weight_matrices(model: Any) -> list[tuple[str, np.ndarray]]:
+    """The 2-D weight matrices off the estimator's own NumPy weight dict.
+
+    ``_weights`` is the pickle-portable source of truth the tabular
+    families keep (the live torch network is REBUILT from it on
+    demand), so the efficiency lane reads exactly what a stage-11
+    checkpoint bundle would carry — never a second weight authority.
+    The 1-D bias vectors are skipped honestly: both engines' own
+    domain is the 2-D weight matrix.
+    """
+    weights = getattr(model, "_weights", None)
+    if not isinstance(weights, dict):
+        return []
+    out: list[tuple[str, np.ndarray]] = []
+    for key in sorted(weights):
+        value = weights[key]
+        if isinstance(value, np.ndarray) and value.ndim == 2:
+            out.append((key, np.asarray(value, dtype=np.float64)))
+    return out
+
+
+@router.post("/efficiency")
+def dl_efficiency(req: DLEfficiencyRequest, request: Request) -> dict:
+    """DL-3 — the weight-efficiency lab (sync by design).
+
+    The REAL engines over the persisted tabular estimator's own
+    weight matrices: ``quantize_int8`` / ``quantize_nf4`` answer with
+    the engine's own ``quantization_report`` per layer (bits per
+    weight, RMSE, relative error) plus the honest memory line over
+    the float32 baseline; ``prune`` answers with the magnitude
+    engine's own per-layer masks (local or global scope) and the
+    metric delta scored on the model's own training dataset through
+    a pruned COPY — the persisted estimator is never mutated (its
+    weights stay full-precision; verify by re-scoring).  The report
+    registers as a downloadable table artifact.
+    """
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    model = model_record.model
+    if model_record.name not in _NETWORKS or not hasattr(model, "_weights"):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is a {model_record.name!r} model; "
+                "the efficiency lab serves the tabular DL families "
+                "trained through POST /api/v1/dl/train (the six torch "
+                "networks whose weight matrices the lab reads)"
+            ),
+        )
+    if req.mode == "prune":
+        if req.level is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "the prune lane needs a level: the target sparsity "
+                    "in [0, 1) (the magnitude engine's own domain)"
+                ),
+            )
+    else:
+        if req.level is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "the level knob rides the prune lane only; "
+                    f"{req.mode!r} quantizes at the format's own fixed "
+                    "precision (int8 absmax / the NF4 block pack)"
+                ),
+            )
+        if req.scope != "local":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "the scope knob rides the prune lane only "
+                    "(the magnitude engine's own local/global masks)"
+                ),
+            )
+    matrices = _weight_matrices(model)
+    if not matrices:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} carries no 2-D weight matrices "
+                "in its weight dict; the efficiency lab has nothing to "
+                "quantize or prune"
+            ),
+        )
+
+    rows: list[dict[str, Any]] = []
+    if req.mode == "prune":
+        # -- the magnitude engine's own masks, applied to a COPY ----------
+        assert req.level is not None  # the guard above proved it
+        level = req.level
+        for layer, w in matrices:
+            mask = magnitude_mask(w, level, scope=req.scope)
+            n_zeroed = int(w.size - np.count_nonzero(~mask))
+            rows.append(
+                {
+                    "layer": layer,
+                    "shape": list(w.shape),
+                    "n_weights": int(w.size),
+                    "n_zeroed": n_zeroed,
+                    "n_kept": int(w.size) - n_zeroed,
+                    "sparsity": count_sparsity(w * mask),
+                }
+            )
+        n_weights_total = sum(r["n_weights"] for r in rows)
+        n_zeroed_total = sum(r["n_zeroed"] for r in rows)
+        achieved = (
+            n_zeroed_total / n_weights_total if n_weights_total else 0.0
+        )
+        # the metric delta over the model's own training dataset,
+        # scored through a pruned COPY (the persisted estimator is
+        # never mutated)
+        metric: dict[str, Any] = {
+            "kind": model_record.task,
+            "before": None,
+            "after": None,
+            "delta": None,
+            "note": (
+                "scored on the model's own training dataset through a "
+                "pruned COPY; the persisted estimator is never mutated"
+            ),
+        }
+        dataset = (
+            request.app.state.dataset_store.get(model_record.dataset_id)
+            if model_record.dataset_id
+            else None
+        )
+        if dataset is not None and hasattr(model, "score"):
+            before = float(model.score(dataset.X, dataset.y))
+            pruned = copy.deepcopy(model)
+            pruned_weights = getattr(pruned, "_weights", None)
+            if isinstance(pruned_weights, dict):
+                for layer, w in matrices:
+                    mask = magnitude_mask(w, level, scope=req.scope)
+                    arr = pruned_weights.get(layer)
+                    if isinstance(arr, np.ndarray):
+                        pruned_weights[layer] = (arr * mask).astype(
+                            arr.dtype
+                        )
+                after = float(pruned.score(dataset.X, dataset.y))
+                metric.update(
+                    before=before, after=after, delta=after - before
+                )
+        else:
+            metric["note"] = (
+                "the model's own training dataset is no longer in the "
+                "session store — the sparsity counts stand alone, the "
+                "metric lanes stay honestly null"
+            )
+        answer: dict[str, Any] = {
+            "mode": "sync",
+            "model_id": req.model_id,
+            "network": model_record.name,
+            "efficiency_mode": req.mode,
+            "n_layers": len(rows),
+            "n_weights": n_weights_total,
+            "target_sparsity": req.level,
+            "scope": req.scope,
+            "n_zeroed": n_zeroed_total,
+            "achieved_sparsity": achieved,
+            "layers": rows,
+            "metric": metric,
+            "note": (
+                "the masks ride the REAL magnitude-pruning engine "
+                "(local or global scope, ties broken to the earlier "
+                "entry); the metric delta is the COPY's score on the "
+                "same carve; the memory story of a pruned net depends "
+                "on the sparse storage format the export takes — the "
+                "report carries the counts, never a fabricated byte "
+                "claim.  The 1-D bias vectors ride untouched (the "
+                "engines' own domain is the 2-D weight matrix)."
+            ),
+        }
+    else:
+        # -- the quantization engine's own report, per layer ---------------
+        method = _EFFICIENCY_QUANT_METHODS[req.mode]
+        total_weights = 0
+        total_bits = 0.0
+        for layer, w in matrices:
+            report = quantization_report(w, method=method)
+            entry = {"layer": layer, **report.as_dict()}
+            rows.append(entry)
+            total_weights += report.n_weights
+            total_bits += report.bits_per_weight * report.n_weights
+        original_bits = 32.0 * total_weights
+        mean_bpw = total_bits / total_weights if total_weights else 0.0
+        savings = (
+            1.0 - total_bits / original_bits if original_bits > 0 else 0.0
+        )
+        answer = {
+            "mode": "sync",
+            "model_id": req.model_id,
+            "network": model_record.name,
+            "efficiency_mode": req.mode,
+            "method": method,
+            "n_layers": len(rows),
+            "n_weights": total_weights,
+            "bits_per_weight": round(mean_bpw, 3),
+            "original_bits": int(original_bits),
+            "quantized_bits": int(round(total_bits)),  # noqa: RUF046 — the float total rounds to a whole-bit count
+            "memory_savings": round(savings, 4),
+            "layers": rows,
+            "note": (
+                "the per-layer rows ride the REAL quantization engine's "
+                "own report (the NF4 block pack with double-quantized "
+                "scales, or the int8 absmax grid); the memory line "
+                "covers the 2-D weight matrices stored float32 — the "
+                "1-D biases ride untouched at full width (the engines' "
+                "own domain).  Nothing is written back: the persisted "
+                "estimator keeps its full-precision weights."
+            ),
+        }
+
+    # the roadmap's own close: the report registers as a table artifact
+    artifact_view: dict[str, Any] | None = None
+    if req.artifact and rows:
+        frame = pd.DataFrame(rows)
+        try:
+            with tempfile.TemporaryDirectory(prefix="pharmaml-dl-eff-") as tmp:
+                target = Path(tmp) / f"dl-efficiency-{req.mode}.csv"
+                export_table(frame, target)
+                data = target.read_bytes()
+            record = request.app.state.artifact_store.register(
+                kind="table",
+                filename=f"dl-efficiency-{req.mode}.csv",
+                content_type="text/csv; charset=utf-8",
+                data=data,
+                meta={
+                    "model_id": req.model_id,
+                    "network": model_record.name,
+                    "mode": req.mode,
+                    "level": req.level,
+                    "scope": req.scope,
+                },
+            )
+            artifact_view = record.view()
+        except (DataValidationError, ModelError) as exc:
+            raise HTTPException(
+                status_code=422, detail=str(exc)
+            ) from exc
+    answer["artifact"] = artifact_view
+    return answer
+
+
+# -- DL-4: the D-MPNN SMILES lane (the roadmap's row 16) --------------------
+
+#: the lane's own carve minimum — the held-out validation needs both
+#: sides (the tune lane's own rule, one vocabulary)
+_MIN_MPNN_ROWS = 12
+
+
+class MpnnTrainRequest(BaseModel):
+    """POST /api/v1/dl/mpnn-train — the D-MPNN's dataset+SMILES body."""
+
+    dataset_id: str
+    smiles_column: str
+    # optional echo check: when given it must be the dataset's OWN
+    # target column (a mismatch is a 422, never a silent re-targeting)
+    target_column: str | None = None
+    # the engine's own constructor vocabulary (mirrored verbatim)
+    hidden_size: int = Field(default=64, ge=1, le=512)
+    depth: int = Field(default=3, ge=1, le=8)
+    ffn_hidden: int | None = Field(default=None, ge=1, le=1024)
+    aggregation: Literal["norm", "sum", "mean"] = "norm"
+    aggregation_norm: float = Field(default=100.0, gt=0.0)
+    dropout: float = Field(default=0.0, ge=0.0, lt=1.0)
+    # the fit's own knobs
+    epochs: int = Field(default=200, ge=1, le=2000)
+    lr: float = Field(default=1e-3, gt=0.0, le=1.0)
+    batch_size: int | None = Field(default=None, ge=1, le=512)
+    # the held-out carve (the roadmap's own validation step)
+    val_split: float = Field(default=0.2, gt=0.0, lt=1.0)
+    standardize: bool = True
+    seed: int = Field(default=0, ge=0, le=2**31 - 1)
+    mode: Literal["job", "sync"] = "job"
+
+
+class MpnnPredictRequest(BaseModel):
+    """POST /api/v1/dl/mpnn-predict — raw SMILES rows."""
+
+    model_id: str
+    smiles: list[str] = Field(min_length=1, max_length=500)
+
+
+def _parse_smiles_rows(
+    smiles_values: list[Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Parse the SMILES column row by row — the honest accounting.
+
+    Returns the valid rows (index + molecule) and the rejected rows
+    (index + the row's own error message): a null cell, a non-string,
+    or a syntax/valence problem is a row-labeled rejection, never a
+    silently dropped row and never a fake molecule.
+    """
+    from pharmaml.chem.molgraph import parse_smiles as _parse_smiles
+
+    valid: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    for index, value in enumerate(smiles_values):
+        if value is None or (isinstance(value, float) and np.isnan(value)):
+            rejected.append(
+                {"index": index, "smiles": None, "error": "a null cell"}
+            )
+            continue
+        if not isinstance(value, str):
+            rejected.append(
+                {
+                    "index": index,
+                    "smiles": str(value),
+                    "error": f"a {type(value).__name__} cell, not a string",
+                }
+            )
+            continue
+        try:
+            molecule = _parse_smiles(value)
+        except DataValidationError as exc:
+            rejected.append(
+                {"index": index, "smiles": value, "error": str(exc)}
+            )
+            continue
+        valid.append({"index": index, "smiles": value, "molecule": molecule})
+    return valid, rejected
+
+
+def _mpnn_train_body(
+    dataset_id: str,
+    smiles_column: str,
+    target_name: str,
+    smiles_values: list[Any],
+    target_values: list[Any],
+    hyperparams: dict[str, Any],
+    val_split: float,
+    seed: int,
+    model_store,
+    manager=None,
+    job_id: str | None = None,
+    cancel_event=None,
+) -> dict:
+    """Job/sync body: the REAL DMPNN fit + the held-out validation."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledJob("Cancelled before the SMILES assembly stage.")
+    if manager is not None and job_id is not None:
+        manager.report_progress(job_id, 5, "assembling the molecule batch")
+
+    valid, rejected = _parse_smiles_rows(smiles_values)
+    # the honest null-target accounting rides the same lane
+    rows: list[dict[str, Any]] = []
+    for entry in valid:
+        target = target_values[entry["index"]]
+        if target is None or (
+            isinstance(target, float) and np.isnan(target)
+        ):
+            rejected.append(
+                {
+                    "index": entry["index"],
+                    "smiles": entry["smiles"],
+                    "error": "a null target cell",
+                }
+            )
+            continue
+        rows.append(
+            {
+                "index": entry["index"],
+                "smiles": entry["smiles"],
+                "molecule": entry["molecule"],
+                "target": float(target),
+            }
+        )
+    if len(rows) < _MIN_MPNN_ROWS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the carve needs >= {_MIN_MPNN_ROWS} parseable rows; the "
+                f"column carries {len(rows)} (with {len(rejected)} "
+                "rejected rows — the lane needs both sides of the split)"
+            ),
+        )
+
+    # the seeded held-out carve (the roadmap's own validation step)
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(len(rows))
+    val_n = max(2, round(val_split * len(rows)))
+    val_idx = sorted(int(i) for i in order[:val_n])
+    train_idx = sorted(int(i) for i in order[val_n:])
+    train_rows = [rows[i] for i in train_idx]
+    val_rows = [rows[i] for i in val_idx]
+
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 45, "fitting the train side (the held-out carve)"
+        )
+    constructor = {
+        key: hyperparams[key]
+        for key in (
+            "hidden_size",
+            "depth",
+            "ffn_hidden",
+            "aggregation",
+            "aggregation_norm",
+            "dropout",
+            "seed",
+        )
+    }
+    fit_knobs = {
+        "epochs": hyperparams["epochs"],
+        "lr": hyperparams["lr"],
+        "batch_size": hyperparams["batch_size"],
+        "standardize": hyperparams["standardize"],
+        "seed": seed,
+    }
+    started = time.monotonic()
+    carve_model = DMPNN(**constructor)
+    history = carve_model.fit(
+        [row["molecule"] for row in train_rows],
+        [row["target"] for row in train_rows],
+        **fit_knobs,
+    )
+    val_predictions = carve_model.predict(
+        [row["molecule"] for row in val_rows]
+    ).ravel()
+    val_targets = np.asarray([row["target"] for row in val_rows])
+    val_rmse = float(
+        np.sqrt(np.mean((val_predictions - val_targets) ** 2))
+    )
+    val_corr = (
+        float(np.corrcoef(val_predictions, val_targets)[0, 1])
+        if len(val_rows) > 2
+        else None
+    )
+    if val_corr is not None and not np.isfinite(val_corr):
+        # a degenerate (constant) prediction side is honestly null,
+        # never a serialized NaN
+        val_corr = None
+
+    if manager is not None and job_id is not None:
+        manager.report_progress(
+            job_id, 85, "refitting on the full corpus (the shipped model)"
+        )
+    # the shipped model: the refit over the FULL parseable corpus
+    # (the tune lane's own rule — the carve measures, the full fit
+    # ships), registered like any trained model
+    estimator = DMPNN(**constructor)
+    refit_history = estimator.fit(
+        [row["molecule"] for row in rows],
+        [row["target"] for row in rows],
+        **fit_knobs,
+    )
+    fit_seconds = time.perf_counter() - started
+    record = TrainedModelRecord(
+        model_id=f"mdl-{uuid.uuid4().hex[:12]}",
+        model=estimator,
+        name="dmpnn_molecular_regressor",
+        task="regression",
+        dataset_id=dataset_id,
+        target=target_name,
+        features=[smiles_column],
+        n_train_rows=len(rows),
+        best_params={"network": "dmpnn", **constructor},
+        cv_scores=None,  # the held-out carve rides the response, not CV
+        cv_mean=None,
+        cv_std=None,
+        fit_seconds=fit_seconds,
+    )
+    model_store.register(record)
+    view = record.view()
+    view["engine"] = "numpy"
+    view["molecular_model"] = True
+    view["predict_url"] = "/api/v1/dl/mpnn-predict"
+    return {
+        "model": view,
+        "val_rmse": val_rmse,
+        "val_n": len(val_rows),
+        "val_correlation": val_corr,
+        "train_history_tail": [float(v) for v in history[-5:]],
+        "refit_history_tail": [float(v) for v in refit_history[-5:]],
+        "n_rows": len(rows),
+        "n_rejected": len(rejected),
+        "rejected": rejected[:10],
+        "n_parameters": estimator.n_parameters(),
+        "held_out_note": (
+            "the carve is seeded and held out: the val_rmse rides the "
+            "train-side model's predictions on rows it never saw; the "
+            "shipped model is the FULL-corpus refit (the tune lane's own "
+            "rule — the carve measures, the full fit ships)"
+        ),
+    }
+
+
+@router.post("/mpnn-train")
+def mpnn_train(req: MpnnTrainRequest, request: Request) -> dict:
+    """DL-4 — the D-MPNN training lane over a SMILES column.
+
+    The REAL numpy D-MPNN (chemprop's directed message passing) over a
+    registered dataset's own SMILES column: the column re-read
+    server-side (the one row-aligned source of truth), the honest
+    rejected-rows accounting (a null cell / a non-string / a parse
+    failure is a row-labeled rejection, never a dropped row), the
+    seeded held-out carve the roadmap's own validation step names, and
+    the shipped model as the FULL-corpus refit registered like any
+    trained model.
+    """
+    store = request.app.state.dataset_store
+    dataset = store.get(req.dataset_id)
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="Unknown dataset_id.")
+    if dataset.task != "regression":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the D-MPNN is a regressor but dataset {req.dataset_id!r} "
+                f"is a {dataset.task} dataset; the lane needs a regression "
+                "target"
+            ),
+        )
+    # the SOURCE frame (the record's own full frame — the one that still
+    # carries the string SMILES column the tabular X drops)
+    columns = [str(c) for c in dataset.frame.columns]
+    if req.smiles_column not in columns:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"smiles_column {req.smiles_column!r} is not one of the "
+                f"dataset's columns: {columns}"
+            ),
+        )
+    if req.smiles_column == dataset.target:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"smiles_column {req.smiles_column!r} is the dataset's own "
+                "target column — the lane needs the target as its y, "
+                "never as its input"
+            ),
+        )
+    if (
+        req.target_column is not None
+        and req.target_column != dataset.target
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"target_column {req.target_column!r} disagrees with the "
+                f"dataset's own target {dataset.target!r} — the lane never "
+                "re-targets a registered dataset"
+            ),
+        )
+    smiles_values = [v for v in dataset.frame[req.smiles_column].tolist()]
+    target_values = [v for v in np.asarray(dataset.y).tolist()]
+    # the carve minimum is a CLIENT error, never an asynchronous job
+    # failure (the DL-1 rule): the same parse the body runs, pre-flighted
+    _valid, _rejected = _parse_smiles_rows(smiles_values)
+    _valid_n = 0
+    for entry in _valid:
+        target = target_values[entry["index"]]
+        if target is not None and not (
+            isinstance(target, float) and np.isnan(target)
+        ):
+            _valid_n += 1
+    if _valid_n < _MIN_MPNN_ROWS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the carve needs >= {_MIN_MPNN_ROWS} parseable rows; the "
+                f"column carries {_valid_n} (with {len(_rejected)} "
+                "rejected rows — the lane needs both sides of the split)"
+            ),
+        )
+    manager = request.app.state.job_manager
+    model_store = request.app.state.model_store
+    hyperparams = {
+        "hidden_size": req.hidden_size,
+        "depth": req.depth,
+        "ffn_hidden": req.ffn_hidden,
+        "aggregation": req.aggregation,
+        "aggregation_norm": req.aggregation_norm,
+        "dropout": req.dropout,
+        "epochs": req.epochs,
+        "lr": req.lr,
+        "batch_size": req.batch_size,
+        "standardize": req.standardize,
+        "seed": req.seed,
+    }
+    if req.mode == "sync":
+        return {
+            "mode": "sync",
+            **_mpnn_train_body(
+                req.dataset_id,
+                req.smiles_column,
+                str(dataset.target),
+                smiles_values,
+                target_values,
+                hyperparams,
+                req.val_split,
+                req.seed,
+                model_store,
+            ),
+        }
+    record = manager.submit(
+        "dl.mpnn-train",
+        "deep-learning",
+        _mpnn_train_body,
+        configuration={
+            "dataset_id": req.dataset_id,
+            "smiles_column": req.smiles_column,
+            "target": str(dataset.target),
+            "hidden_size": req.hidden_size,
+            "depth": req.depth,
+            "epochs": req.epochs,
+            "val_split": req.val_split,
+            "seed": req.seed,
+        },
+        dataset_id=req.dataset_id,
+        smiles_column=req.smiles_column,
+        target_name=str(dataset.target),
+        smiles_values=smiles_values,
+        target_values=target_values,
+        hyperparams=hyperparams,
+        val_split=req.val_split,
+        seed=req.seed,
+        model_store=model_store,
+        manager=manager,
+    )
+    return {"mode": "job", "job": record.public()}
+
+
+@router.post("/mpnn-predict")
+def mpnn_predict(req: MpnnPredictRequest, request: Request) -> dict:
+    """DL-4 — the D-MPNN's own prediction path over raw SMILES."""
+    model_record = request.app.state.model_store.get(req.model_id)
+    if model_record is None:
+        raise HTTPException(status_code=404, detail="Unknown model_id.")
+    if not isinstance(model_record.model, DMPNN):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"model {req.model_id} is not a molecular D-MPNN; "
+                "molecular prediction needs a model trained through "
+                "POST /api/v1/dl/mpnn-train"
+            ),
+        )
+    valid, rejected = _parse_smiles_rows(req.smiles)
+    if not valid:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "every SMILES row was rejected — the prediction lane "
+                "needs at least one parseable molecule"
+            ),
+        )
+    predictions = model_record.model.predict(
+        [row["molecule"] for row in valid]
+    ).ravel()
+    return {
+        "model_id": req.model_id,
+        "n_valid": len(valid),
+        "predictions": [
+            {"index": row["index"], "smiles": row["smiles"],
+             "prediction": float(value)}
+            for row, value in zip(valid, predictions, strict=True)
+        ],
+        "n_rejected": len(rejected),
+        "rejected": rejected[:10],
+        "note": (
+            "the predictions are in the original target units, one per "
+            "VALID row (aligned with the served index); the rejected rows "
+            "ride their own accounting, never dropped silently"
         ),
     }

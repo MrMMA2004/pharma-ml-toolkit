@@ -244,7 +244,10 @@ def test_the_contract_carries_the_two_new_paths() -> None:
     # the r380 DS-3 frames/register path; 145 -> 146 by the r382 ML-4
     # unsupervised pca sibling path; 146 -> 147 by the r383 ML-5
     # drift path; 147 -> 148 by the r383 DL-2 gnn-explain path
-    assert len(paths) == 148, (
+        # 148 -> 152 by the r384 fifth 3-item set (the DL-3 efficiency
+    # path + the DL-4 mpnn-train/mpnn-predict pair + the GEN-3
+    # rl-optimize path)
+    assert len(paths) == 152, (
         "the contract must pin 148 paths (112 + the runs pair + the r351 "
         "quality path + the r352 diagnostics pair + the r358 part17 §5 "
         "multiresponse quartet + the r359 part17 §6 rsm septet + the "

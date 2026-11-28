@@ -55,7 +55,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from pharmaml.exceptions import DataValidationError
@@ -263,8 +263,19 @@ class ReinventOptimizer:
         self.seed = seed
 
     # -- public API ------------------------------------------------------
-    def optimize(self) -> GenerationResult:
+    def optimize(
+        self, *, on_iteration: Callable[[int], None] | None = None
+    ) -> GenerationResult:
         """Run the fine-tuning loop; returns the ranked molecules.
+
+        Parameters
+        ----------
+        on_iteration:
+            Optional hook called at the TOP of every iteration with the
+            (0-based) iteration index -- the route lane's cancellation
+            seam (GEN-3: a mid-run cancel lands BETWEEN iterations, the
+            population-route precedent).  The default ``None`` keeps the
+            engine's own behavior untouched.
 
         Returns
         -------
@@ -345,6 +356,11 @@ class ReinventOptimizer:
         n_valid = 0
 
         for iteration in range(self.iterations):
+            # the route lane's cancellation seam (GEN-3): a mid-run
+            # cancel lands BETWEEN iterations, before this iteration's
+            # sampling -- the population-route precedent
+            if on_iteration is not None:
+                on_iteration(iteration)
             # deterministic per-iteration sampling seed: independent of any
             # sampling the caller did with the prior before the run
             sample_seed = (self.seed * 1_000_003 + iteration) % (2**31)
@@ -507,6 +523,7 @@ def run_rl_optimization(
     corpus: Sequence[str] | None = None,
     prior: SmilesRnn | None = None,
     prior_epochs: int = 8,
+    on_iteration: Callable[[int], None] | None = None,
     **kwargs: Any,
 ) -> GenerationResult:
     """One-call RL optimisation (trains a prior from the corpus if needed).
@@ -525,4 +542,4 @@ def run_rl_optimization(
         prior_epochs=prior_epochs,
         **kwargs,
     )
-    return optimizer.optimize()
+    return optimizer.optimize(on_iteration=on_iteration)

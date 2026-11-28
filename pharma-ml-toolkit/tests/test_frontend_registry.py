@@ -233,7 +233,10 @@ def test_the_contract_carries_the_registry_deletion_path() -> None:
     # the r380 DS-3 frames/register path; 145 -> 146 by the r382 ML-4
     # unsupervised pca sibling path; 146 -> 147 by the r383 ML-5
     # drift path; 147 -> 148 by the r383 DL-2 gnn-explain path
-    assert len(paths) == 148, (
+        # 148 -> 152 by the r384 fifth 3-item set (the DL-3 efficiency
+    # path + the DL-4 mpnn-train/mpnn-predict pair + the GEN-3
+    # rl-optimize path)
+    assert len(paths) == 152, (
         "the contract must pin 148 paths (the registry's DELETE rides the "
         "existing trained-model path — no new path this lane; the r358 "
         "multiresponse quartet and the r359 rsm septet are their own "

@@ -1,3 +1,84 @@
+## [1.2.256] — 2026-11-28 — round 384 (the 177th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — the fifth 3-item set, three rows one after another: DL-3 + DL-4 + GEN-3, the set closed in one round; trace 1a2228bc4dbfa515)
+
+- **DL-3 (the roadmap's row 15 — the efficiency lab)**: the weight
+  engines at last reachable from the GUI: `POST
+  /api/v1/dl/efficiency` over the REAL `ml/quantization.py` +
+  `ml/pruning.py` engines. The persisted tabular estimator's own 2-D
+  weight matrices are read off its `_weights` dict (the
+  pickle-portable source of truth a stage-11 checkpoint carries —
+  never a second weight authority); `quantize_int8` /
+  `quantize_nf4` answer with the engine's own `quantization_report`
+  per layer (bits per weight, RMSE, relative error) plus the honest
+  memory line over the float32 baseline (the 1-D biases honestly
+  untouched at full width); `prune` answers with the magnitude
+  engine's own local/global masks at a target sparsity (the
+  level/scope knobs a 422 on the lanes they do not ride, never a
+  silent skip), the metric delta scored on the model's own training
+  dataset through a pruned COPY — the persisted estimator never
+  mutated, the re-run identity API-pinned. The report registers as
+  a downloadable table artifact; the stage-11c card renders the
+  mode/level/scope controls + the per-layer table + the
+  digest-verified artifact download. 7 API tests + 12 vitests +
+  the 6-clause drift guard `tests/test_frontend_dl_efficiency.py`.
+
+- **DL-4 (the roadmap's row 16 — the D-MPNN molecular lane)**: "give
+  a SMILES column, get a property model" — `POST
+  /api/v1/dl/mpnn-train` + `POST /api/v1/dl/mpnn-predict` over the
+  REAL numpy engine (`ml/mpnn.py`'s `DMPNN` — chemprop's directed
+  message passing). The SMILES column is re-read server-side off
+  the dataset's own source frame (row-aligned — the one source of
+  truth), the honest rejected-rows accounting (a null cell / a
+  non-string / a parse failure is a row-labeled rejection, never a
+  dropped row), the seeded held-out carve the roadmap's own
+  validation step names (val RMSE + correlation; the
+  PRE-REGISTERED tolerance API-pinned on the heavy-atom-count
+  fixture: RMSE < 0.75 well under the ~1.35 target std,
+  correlation > 0.8 — learned from structure alone), and the
+  shipped model as the FULL-corpus refit registered like any
+  trained model (a MOLECULAR model with its own predict path); the
+  carve minimum pre-flighted in the route (the DL-1 rule — never
+  an async job failure). The molecular models' prediction path
+  serves raw SMILES with the rejected rows riding their own
+  accounting. The D-MPNN lane's frontend section: the lane's own
+  dataset pick + the SMILES column select + the held-out verdict
+  card + the raw-SMILES predict table with the rejected rows
+  rendered inline. 5 API tests + 13 vitests + the 6-clause drift
+  guard `tests/test_frontend_dl_mpnn.py`.
+
+- **GEN-3 (the roadmap's row 17 — the REINVENT-style RL
+  optimizer)**: `POST /api/v1/generative/rl-optimize` over the REAL
+  engine (`generative/rl.py`'s `run_rl_optimization` — the
+  policy-gradient fine-tuning of a SMILES RNN prior against the
+  scoring objective, with the prior-drift anchor and the
+  experience-replay buffer): the objective spec rides the SAME
+  builder the GA lane serves (one vocabulary, never a second
+  scoring authority), a session prior (`prior_id` over the
+  molecular prior registry, the feature-prior refused with its own
+  pointer) or the engine's own on-the-fly prior, a managed job with
+  per-step telemetry (the RNN train lane's own TRAINING_METRICS
+  event pattern — the per-iteration mean/best curves + the drift
+  diagnostics published after the run, the engine's own
+  introspection, never a fabricated stream) and cancellation
+  BETWEEN iterations through the engine's own new `on_iteration`
+  hook (the population-route precedent — the engine grew the seam
+  honestly, backward-compatible). The method selector's THIRD card
+  + the RL execution block (the prior select over the session
+  registry, the verdict card with the leaderboard + the
+  per-iteration step curve through PlotlyFigure). 4 API tests +
+  8 vitests + the 7-clause drift guard
+  `tests/test_frontend_generative_rl.py`.
+
+- **The contract re-exported 152 paths / 107 schemas** (148 -> 152
+  by the fifth 3-item set: the DL-3 efficiency path + the DL-4
+  mpnn-train/mpnn-predict pair + the GEN-3 rl-optimize path; the
+  request DTOs ride the same growth), the types regenerated, and
+  all four count pins trued with the dated comments.
+
+- **The engine changes stay honest and backward-compatible**: the
+  RL engine's `on_iteration` hook (default None), nothing else
+  touched in the engines' own behavior — the full generative engine
+  suite re-run green (316/316).
+
 ## [1.2.255] — 2026-11-28 — round 383 (the 176th recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — the fourth 3-item set, three rows one after another: ML-5 + DL-1 + DL-2, the set closed in one round; trace 1a22225de84673f5)
 
 - **ML-5 (the roadmap's row 12 — the drift lane)**: the batch-level
