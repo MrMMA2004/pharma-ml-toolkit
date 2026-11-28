@@ -1,3 +1,90 @@
+## [1.2.252] — 2026-11-28 — round 380 (the 173rd recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — DS-3, the P1 row 7, the descriptor/fingerprint frames registered as derived datasets; trace 1a22142edb9b1e19, item 2 of the second 3-item set)
+
+- **DS-3 (the roadmap's row 7 — the Descriptor/Fingerprint stage's
+  missing verb)**:
+  `POST /api/v1/chemistry/frames/register` over the REAL
+  featurization engines (`chem/descriptors.py`'s
+  `compute_descriptors` + `compute_fingerprints`): stage 5's
+  Display frames previously died in component state — the
+  featurized matrix never entered the dataset store, so the ML/DL
+  workspaces could not train over it. The request takes
+  `{dataset_id, column | auto-detected, featurization:
+  descriptors|fingerprints, descriptor_set | kind/radius/n_bits/
+  as_counts/include_chirality, target | null, mode}`; the engine
+  re-reads the source record's SMILES column server-side — the one
+  row-aligned source of truth (the inline display lane can never
+  align the target) — and registers the featurized frame as a NEW
+  derived dataset through the same path every upload takes (temp
+  CSV → the REAL `load_dataset` → `DatasetStore.register`): every
+  source column (the target included) plus the appended feature
+  columns (217 rdkit_all descriptor columns, or the `fp_0..fp_N`
+  bit columns). The target is optional — `null` inherits the
+  source's own target+task; an explicit override must name an
+  existing column (the task re-inferred at load). A feature column
+  colliding with an existing source column is an honest 422 (never
+  a silent pandas mangle); a non-SMILES column, an unknown target
+  or dataset are the DS-2-family 422/404s; rejected rows are
+  accounted (row, input, reason: unparseable /
+  descriptor-computation-failure), never silently dropped — the
+  zero-heavy-atom `[H]` row that the rdkit SPS descriptor drops by
+  division is the fixture's own evidence.
+- **The ML loop closed (the roadmap's own acceptance clause)**:
+  `POST /api/v1/ml/train` over the derived dataset_id trains —
+  the classical SMILES → descriptors → model chain that previously
+  only the backend workflow templates could run end-to-end, now one
+  GUI verb (register) + one workspace handover away.
+- **The frontend**: stage 5 gains the register block — the
+  featurization select (descriptors | fingerprints, riding the
+  sets/knobs picked on the two cards above), the "Register as
+  derived dataset" run button (job mode, the JobRunCard relay; the
+  column pick arms it — no pull needed, the engine re-reads the
+  source server-side), the honest notes (the source is never
+  modified, rejected rows never silently dropped), and the report
+  card: the counts line (n_rows → kept · rejected ·
+  features_appended), the rejected-rows table with reasons, the
+  derived dataset's identity + a Select action + the
+  "Continue in Machine Learning" navigate hint (the shell's own
+  workspace switcher handed down to the page — the first
+  cross-workspace handover in the Datasets flow). The client's
+  `chemistryApi.registerFrames` + the strict
+  `parseFramesRegisterReport` (malformed throws); the wire body
+  mirrors the backend's `FramesRegisterRequest` field-for-field
+  (the chemistry mirror guard extended with the fourth request +
+  the route pinned as consumed).
+- **The evidence**: 10 new API tests (the ML-loop closure — the
+  8-row fixture → 6 kept / 2 rejected / 217 feature columns, the
+  derived view carrying the source columns + MolWt/MolLogP + the
+  target, the train lane green over the derived id; the
+  fingerprints branch — 512 bit columns appended, the 514-column
+  derived frame, the morgan provenance; the source untouched
+  sha-256 pin; the rejected-rows accounting with the honest
+  reasons; the non-SMILES column / unknown target / unknown column
+  / unknown dataset 422/404 family; the target override lane; the
+  descriptor-column collision 422; the job-mode registration; the
+  all-rejected honest 422 on both branches), 3 new vitests over
+  the full page mount (the register flow end-to-end — the request
+  body mirror, the report relay, the counts line, the rejected
+  table, the navigate hint spy, the derived select; the
+  fingerprints branch with the select switch + the absent
+  navigate hint without the prop; the honest gating), 13 new
+  drift-guard tests in `test_frontend_frames_register.py` (the
+  featurization/descriptor-set/fingerprint-kind vocabularies
+  pinned across route / contract / client; the no-write scan
+  extended to the register body's staged copy+concat; the page +
+  parser + navigate pins; the provenance-on-the-store pins with
+  the duplicate-dict-key lesson — the fingerprints branch's kind
+  rides `fingerprint_kind`, never a second `kind` key), the
+  contract-count pins trued proactively this round (the four
+  `== 144` / two `== 99` pins trued to 145 / 100 with the dated
+  history comments — the r379 lesson applied: every count pin
+  rides every contract-touching close-out), the contract
+  re-exported (145 paths / 100 schemas — the new
+  FramesRegisterRequest DTO + the new path), the full suite run
+  at the close-out gates.
+- NO release (per the standing authorization rule): no tag, no
+  installer — v1.2.244 stands published; the tracked homes add the
+  252 zip alongside the 246–251 set.
+
 ## [1.2.251] — 2026-11-29 — round 379 (the 172nd recorded run: the WORKFLOW_ENHANCEMENT_ROADMAP continues — DS-2, the P1 row 6, the molecular standardization route over chem/standardize's REINVENT-style engine; trace 1a220fd32d3acf31, item 1 of the second 3-item set)
 
 - **DS-2 (the roadmap's row 6 — the Clean stage's missing verb)**:

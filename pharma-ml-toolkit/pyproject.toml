@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pharmaml"
-version = "1.2.251"
+version = "1.2.252"
 description = "Research-oriented Python toolkit for QSAR, pharmaceutical calculations, cheminformatics, and molecular-docking workflows."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -295,6 +295,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chemistry/frames/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Frames Register
+         * @description DS-3 -- ``POST /api/v1/chemistry/frames/register``.
+         *
+         *     Runs the REAL descriptor/fingerprint engines over one dataset
+         *     SMILES column (re-read server-side -- the row-aligned source of
+         *     truth) and registers the featurized frame as a NEW derived
+         *     dataset: every source column (the target included) plus the
+         *     appended feature columns. The source record is untouched
+         *     (sha-256-pinned by the API tests, scanned by the frontend drift
+         *     guard); rejected rows are accounted, never silently dropped.
+         */
+        post: operations["frames_register_api_v1_chemistry_frames_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/chemistry/standardize": {
         parameters: {
             query?: never;
@@ -3663,6 +3691,81 @@ export interface components {
             /** Response Columns */
             response_columns?: string[];
         };
+        /**
+         * FramesRegisterRequest
+         * @description DS-3 -- the Descriptor/Fingerprint stage's missing verb.
+         *
+         *     Registers the computed descriptor frame or fingerprint matrix as a
+         *     NEW derived dataset through the same load-and-register path every
+         *     upload takes. The engine re-reads the source record's SMILES
+         *     column server-side (row-aligned with the source frame -- the one
+         *     source of truth), computes the REAL features through
+         *     :func:`pharmaml.chem.descriptors.compute_descriptors` /
+         *     :func:`compute_fingerprints`, and appends the feature columns to a
+         *     staged copy of the source frame: every source column (the target
+         *     included) rides the derived dataset, so the ML/DL workspaces can
+         *     train over the featurized matrix directly -- the classical
+         *     SMILES -> descriptors -> model loop, closed inside the GUI.
+         *
+         *     ``target`` is optional: ``None`` inherits the source record's own
+         *     target; an explicit override must name an existing source column
+         *     (the task is then re-inferred at load time). The source record is
+         *     never mutated; rows the engine rejects (unparseable, or a
+         *     per-molecule descriptor failure) leave the derived frame but ride
+         *     the response's ``rejected`` list -- never silently dropped.
+         */
+        FramesRegisterRequest: {
+            /**
+             * As Counts
+             * @default false
+             */
+            as_counts: boolean;
+            /** Column */
+            column?: string | null;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Descriptor Set
+             * @default rdkit_all
+             * @enum {string}
+             */
+            descriptor_set: "rdkit_all" | "morgan" | "mordred";
+            /**
+             * Featurization
+             * @default descriptors
+             * @enum {string}
+             */
+            featurization: "descriptors" | "fingerprints";
+            /**
+             * Include Chirality
+             * @default false
+             */
+            include_chirality: boolean;
+            /**
+             * Kind
+             * @default morgan
+             * @enum {string}
+             */
+            kind: "morgan" | "rdkit" | "atom_pair" | "avalon";
+            /**
+             * Mode
+             * @default job
+             * @enum {string}
+             */
+            mode: "job" | "sync";
+            /**
+             * N Bits
+             * @default 2048
+             */
+            n_bits: number;
+            /**
+             * Radius
+             * @default 2
+             */
+            radius: number;
+            /** Target */
+            target?: string | null;
+        };
         /** GanSampleRequest */
         GanSampleRequest: {
             /**
@@ -5976,6 +6079,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["FingerprintsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    frames_register_api_v1_chemistry_frames_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FramesRegisterRequest"];
             };
         };
         responses: {

@@ -240,9 +240,10 @@ def test_the_contract_carries_the_two_new_paths() -> None:
     # the autoencoder pair, the GAN pair, the diffusion pair);
     # 142 -> 143 by the r378 GEN-2 metrics path (the pin left stale
     # at 142 in that round — caught and trued by the r379 DS-2 round);
-    # 143 -> 144 by the r379 DS-2 standardization path
-    assert len(paths) == 144, (
-        "the contract must pin 144 paths (112 + the runs pair + the r351 "
+    # 143 -> 144 by the r379 DS-2 standardization path; 144 -> 145 by
+    # the r380 DS-3 frames/register path
+    assert len(paths) == 145, (
+        "the contract must pin 145 paths (112 + the runs pair + the r351 "
         "quality path + the r352 diagnostics pair + the r358 part17 §5 "
         "multiresponse quartet + the r359 part17 §6 rsm septet + the "
         "r365 part18 unsupervised trio + the r365 part18 RL trio + the "

@@ -2412,6 +2412,105 @@
         "title": "FitRsmRequest",
         "type": "object"
       },
+      "FramesRegisterRequest": {
+        "description": "DS-3 -- the Descriptor/Fingerprint stage's missing verb.\n\nRegisters the computed descriptor frame or fingerprint matrix as a\nNEW derived dataset through the same load-and-register path every\nupload takes. The engine re-reads the source record's SMILES\ncolumn server-side (row-aligned with the source frame -- the one\nsource of truth), computes the REAL features through\n:func:`pharmaml.chem.descriptors.compute_descriptors` /\n:func:`compute_fingerprints`, and appends the feature columns to a\nstaged copy of the source frame: every source column (the target\nincluded) rides the derived dataset, so the ML/DL workspaces can\ntrain over the featurized matrix directly -- the classical\nSMILES -> descriptors -> model loop, closed inside the GUI.\n\n``target`` is optional: ``None`` inherits the source record's own\ntarget; an explicit override must name an existing source column\n(the task is then re-inferred at load time). The source record is\nnever mutated; rows the engine rejects (unparseable, or a\nper-molecule descriptor failure) leave the derived frame but ride\nthe response's ``rejected`` list -- never silently dropped.",
+        "properties": {
+          "as_counts": {
+            "default": false,
+            "title": "As Counts",
+            "type": "boolean"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "descriptor_set": {
+            "default": "rdkit_all",
+            "enum": [
+              "rdkit_all",
+              "morgan",
+              "mordred"
+            ],
+            "title": "Descriptor Set",
+            "type": "string"
+          },
+          "featurization": {
+            "default": "descriptors",
+            "enum": [
+              "descriptors",
+              "fingerprints"
+            ],
+            "title": "Featurization",
+            "type": "string"
+          },
+          "include_chirality": {
+            "default": false,
+            "title": "Include Chirality",
+            "type": "boolean"
+          },
+          "kind": {
+            "default": "morgan",
+            "enum": [
+              "morgan",
+              "rdkit",
+              "atom_pair",
+              "avalon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "mode": {
+            "default": "job",
+            "enum": [
+              "job",
+              "sync"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_bits": {
+            "default": 2048,
+            "exclusiveMinimum": 32.0,
+            "maximum": 16384.0,
+            "title": "N Bits",
+            "type": "integer"
+          },
+          "radius": {
+            "default": 2,
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Radius",
+            "type": "integer"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "dataset_id"
+        ],
+        "title": "FramesRegisterRequest",
+        "type": "object"
+      },
       "GanSampleRequest": {
         "properties": {
           "n": {
@@ -6664,6 +6763,50 @@
           }
         },
         "summary": "Fingerprints",
+        "tags": [
+          "chemistry"
+        ]
+      }
+    },
+    "/api/v1/chemistry/frames/register": {
+      "post": {
+        "description": "DS-3 -- ``POST /api/v1/chemistry/frames/register``.\n\nRuns the REAL descriptor/fingerprint engines over one dataset\nSMILES column (re-read server-side -- the row-aligned source of\ntruth) and registers the featurized frame as a NEW derived\ndataset: every source column (the target included) plus the\nappended feature columns. The source record is untouched\n(sha-256-pinned by the API tests, scanned by the frontend drift\nguard); rejected rows are accounted, never silently dropped.",
+        "operationId": "frames_register_api_v1_chemistry_frames_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FramesRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Frames Register Api V1 Chemistry Frames Register Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Frames Register",
         "tags": [
           "chemistry"
         ]

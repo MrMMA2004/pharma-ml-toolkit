@@ -1838,3 +1838,344 @@ class TestChemistryStandardize:
         )
         assert r.status_code == 422, r.text
         assert "no derived dataset" in r.json()["detail"]
+
+
+# ------------------------------------------------------ DS-3 frames/register
+
+
+class TestChemistryFramesRegister:
+    """DS-3 (roadmap row 7): the Descriptor/Fingerprint stage's verb.
+
+    ``POST /api/v1/chemistry/frames/register`` over the REAL engines
+    (`chem/descriptors.py`): the derived dataset carries every source
+    column (the target included) plus the appended feature columns,
+    the ML train lane closes the SMILES -> descriptors -> model loop
+    over the derived id, the source stays untouched (sha-256 pinned),
+    and rejected rows are accounted, never silently dropped.
+    """
+
+    def _smiles_csv(self) -> bytes:
+        buf = io.StringIO()
+        buf.write("smiles,y\n")
+        for smi, y in [
+            ("CCO", "1.5"),
+            ("not-a-smiles", "3.5"),
+            ("[H]", "4.5"),
+            ("CCC", "5.5"),
+            ("CCCO", "6.5"),
+            ("CCCOO", "7.5"),
+            ("CC", "8.5"),
+            ("CCN", "9.5"),
+        ]:
+            buf.write(f"{smi},{y}\n")
+        return buf.getvalue().encode()
+
+    def _upload_smiles(self, client) -> dict:
+        return _upload(
+            client,
+            data=self._smiles_csv(),
+            name="toy.csv", target="y",
+        )
+
+    def test_descriptors_register_closes_the_ml_loop(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": src,
+                "column": "smiles",
+                "featurization": "descriptors",
+                "descriptor_set": "rdkit_all",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # the fail-first wiring proof: the REAL rdkit_all engine ran
+        # (217 descriptor columns) and the honest accounting is exact
+        assert body["counts"] == {
+            "n_rows": 8, "kept": 6, "rejected": 2,
+            "features_appended": 217,
+        }
+        assert body["featurization"] == "descriptors"
+        derived = body["dataset"]
+        assert derived["dataset_id"] != src
+        assert derived["name"] == "toy (descriptors)"
+        assert derived["derived"] == {
+            "kind": "derived-descriptors",
+            "source_dataset_id": src,
+            "column": "smiles",
+            "descriptor_set": "rdkit_all",
+            "n_features": 217,
+            "target": "y",
+        }
+        assert body["provenance"] == derived["derived"]
+        # the derived frame: 6 kept rows, source columns + descriptors
+        assert derived["shape"] == [6, 219]
+        columns = derived["columns"]
+        assert columns[:2] == ["smiles", "y"]
+        assert "MolWt" in columns and "MolLogP" in columns
+        # the roadmap's own acceptance clause: the ML lane trains over
+        # the derived id -- the SMILES -> descriptors -> model loop
+        trained = _train(
+            client, derived["dataset_id"],
+            task="regression", cv=2,
+        )
+        assert trained["model_id"].startswith("mdl-")
+        assert trained["dataset_id"] == derived["dataset_id"]
+
+    def test_fingerprints_register_appends_the_bit_columns(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": src,
+                "column": "smiles",
+                "featurization": "fingerprints",
+                "n_bits": 512,
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["counts"]["n_rows"] == 8
+        assert body["counts"]["kept"] == 7  # only not-a-smiles rejected
+        assert body["counts"]["rejected"] == 1
+        assert body["counts"]["features_appended"] == 512
+        assert body["featurization"] == "fingerprints"
+        derived = body["dataset"]
+        # source columns + 512 bit columns
+        assert derived["shape"] == [7, 514]
+        columns = derived["columns"]
+        assert columns[:2] == ["smiles", "y"]
+        assert "fp_0" in columns and "fp_511" in columns
+        assert derived["derived"]["kind"] == "derived-fingerprints"
+        assert derived["derived"]["n_bits"] == 512
+        # the bit cells are real morgan verdicts, not zeros-by-default:
+        # ethanol's row has at least one set bit among the first 64
+        values = client.get(
+            f"/api/v1/datasets/{derived['dataset_id']}/column/fp_0",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert len(values) == 7
+
+    def test_source_dataset_bytes_untouched_sha256_pinned(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+
+        def _column_digest() -> tuple[str, dict]:
+            payload = client.get(
+                f"/api/v1/datasets/{src}/column/smiles",
+                headers=auth_headers(),
+            ).json()
+            digest = hashlib.sha256(
+                json.dumps(payload["values"]).encode()
+            ).hexdigest()
+            return digest, payload
+
+        before_digest, before = _column_digest()
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": src,
+                "column": "smiles",
+                "featurization": "descriptors",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        after_digest, after = _column_digest()
+        # the §15.4 no-mutation rule: identical digest + identical view
+        assert after_digest == before_digest
+        assert after == before
+        view = client.get(
+            f"/api/v1/datasets/{src}", headers=auth_headers()
+        ).json()
+        assert view["shape"] == ds["shape"]
+        assert view["size_bytes"] == ds["size_bytes"]
+        assert "derived" not in view  # the source is a plain upload
+
+    def test_rejected_rows_accounted_never_silent(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "smiles",
+                "featurization": "descriptors",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert [(row["row"], row["input"], row["reason"])
+                for row in body["rejected"]] == [
+            (1, "not-a-smiles", "unparseable"),
+            (2, "[H]", "descriptor-computation-failure"),
+        ]
+
+    def test_non_smiles_column_unknown_target_and_dataset(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "y",  # the numeric target: not a SMILES column
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422, r.text
+        detail = r.json()["detail"]
+        assert "not a SMILES column" in detail
+        assert "'smiles'" in detail  # names the detected column
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "target": "nope",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422
+        assert "target column" in r.json()["detail"]
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "nope",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422
+        assert "not found" in r.json()["detail"]
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={"dataset_id": "ds-unknown", "mode": "sync"},
+        )
+        assert r.status_code == 404
+
+    def test_target_override_rides_the_derived_dataset(self, client):
+        ds = self._upload_smiles(client)
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "smiles",
+                "featurization": "descriptors",
+                "target": "y",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 200, r.text
+        derived = r.json()["dataset"]
+        # the explicit override rides the provenance + the view's target
+        assert derived["derived"]["target"] == "y"
+        view = client.get(
+            f"/api/v1/datasets/{derived['dataset_id']}",
+            headers=auth_headers(),
+        ).json()
+        assert view["target"] == "y"
+
+    def test_feature_column_collision_is_an_honest_422(self, client):
+        # a source frame already carrying an rdkit_all descriptor name:
+        # the appended column would collide -- refuse, never mangle
+        buf = io.StringIO()
+        buf.write("smiles,y,MolWt\n")
+        for smi, y, mw in [
+            ("CCO", "1.5", "46.07"),
+            ("CCC", "2.5", "44.1"),
+            ("CCN", "3.5", "45.08"),
+        ]:
+            buf.write(f"{smi},{y},{mw}\n")
+        ds = _upload(
+            client, data=buf.getvalue().encode(),
+            name="collide.csv", target="y",
+        )
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "column": "smiles",
+                "featurization": "descriptors",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "collides" in r.json()["detail"]
+        assert "MolWt" in r.json()["detail"]
+
+    def test_job_mode_registers_the_derived_dataset(self, client):
+        ds = self._upload_smiles(client)
+        src = ds["dataset_id"]
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": src,
+                "column": "smiles",
+                "featurization": "fingerprints",
+                "n_bits": 512,
+                "mode": "job",
+            },
+        )
+        assert r.status_code == 200, r.text
+        job = r.json()["job"]
+        final = _wait_job(client, job["job_id"])
+        assert final["state"] == "COMPLETED", final
+        body = client.get(
+            f"/api/v1/jobs/{job['job_id']}/result", headers=auth_headers()
+        ).json()["result"]
+        assert body["counts"]["n_rows"] == 8
+        assert body["counts"]["features_appended"] == 512
+        assert body["dataset"]["derived"]["source_dataset_id"] == src
+        assert body["dataset"]["derived"]["n_bits"] == 512
+        values = client.get(
+            f"/api/v1/datasets/{body['dataset']['dataset_id']}"
+            "/column/smiles",
+            headers=auth_headers(),
+        ).json()["values"]
+        assert "not-a-smiles" not in values
+        assert "CCO" in values
+
+    def test_all_rejected_rows_is_an_honest_422(self, client):
+        buf = io.StringIO()
+        buf.write("smiles,y\n")
+        for smi, y in [("not-a-smiles", "0"), ("garbage", "1")]:
+            buf.write(f"{smi},{y}\n")
+        ds = _upload(
+            client, data=buf.getvalue().encode(),
+            name="junk.csv", target="y",
+        )
+        # descriptors lane: the engine's own honest refusal rides the 422
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={"dataset_id": ds["dataset_id"], "mode": "sync"},
+        )
+        assert r.status_code == 422, r.text
+        assert "No valid SMILES" in r.json()["detail"]
+        # fingerprints lane: the route's kept-guard refuses the empty
+        # derived frame with its own honest message
+        r = client.post(
+            "/api/v1/chemistry/frames/register",
+            headers=auth_headers(),
+            json={
+                "dataset_id": ds["dataset_id"],
+                "featurization": "fingerprints",
+                "mode": "sync",
+            },
+        )
+        assert r.status_code == 422, r.text
+        assert "no derived dataset" in r.json()["detail"]

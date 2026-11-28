@@ -7,6 +7,7 @@ import {
   FileSearch,
   FlaskConical,
   Fingerprint,
+  Layers,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -27,8 +28,11 @@ import {
   chemistryApi,
   type DescriptorFrame,
   type FingerprintMatrix,
+  type FramesFeaturization,
+  type FramesRegisterReport,
   type StandardizeOp,
   type StandardizeReport,
+  parseFramesRegisterReport,
   parseStandardizeReport,
 } from "@/services/chemistry/client";
 import {
@@ -44,6 +48,7 @@ import {
   type ArtifactView,
 } from "@/services/artifacts/client";
 import { api } from "@/services/api/client";
+import type { WorkspaceId } from "@/app/workspaces";
 import type { components } from "@/types/api.d";
 
 /**
@@ -246,7 +251,16 @@ function PreviewTable({ preview }: { preview: FramePreview }) {
   );
 }
 
-export function DatasetsPage() {
+export function DatasetsPage({
+  onNavigate,
+}: {
+  /**
+   * The DS-3 "continue in Machine Learning" lane: the shell's own
+   * workspace switcher, passed down so the featurized dataset's
+   * report card can hand the workflow over to the ML stage.
+   */
+  onNavigate?: (id: WorkspaceId) => void;
+}) {
   // stage 1-2: registry + selection
   const [datasets, setDatasets] = useState<readonly DatasetView[]>([]);
   const [registryError, setRegistryError] = useState<string | null>(null);
@@ -293,6 +307,14 @@ export function DatasetsPage() {
   const [chemError, setChemError] = useState<string | null>(null);
   const [descriptorFrame, setDescriptorFrame] = useState<DescriptorFrame | null>(null);
   const [fpMatrix, setFpMatrix] = useState<FingerprintMatrix | null>(null);
+
+  // stage 5: the DS-3 register lane (descriptors/fingerprints as a
+  // NEW derived dataset — the SMILES→features→model loop closed)
+  const [regFeaturization, setRegFeaturization] = useState<FramesFeaturization>("descriptors");
+  const [regBusy, setRegBusy] = useState(false);
+  const [regJobId, setRegJobId] = useState<string | null>(null);
+  const [regError, setRegError] = useState<string | null>(null);
+  const [regReport, setRegReport] = useState<FramesRegisterReport | null>(null);
 
   // stage 6: split
   const [testSize, setTestSize] = useState(0.2);
@@ -348,6 +370,8 @@ export function DatasetsPage() {
     setStdReport(null);
     setDescriptorFrame(null);
     setFpMatrix(null);
+    setRegJobId(null);
+    setRegReport(null);
     setSplitReport(null);
     setSplitSmilesColumn("");
     setSplitGroupColumn("");
@@ -416,6 +440,8 @@ export function DatasetsPage() {
           setStdReport(null);
           setDescriptorFrame(null);
           setFpMatrix(null);
+          setRegJobId(null);
+          setRegReport(null);
           setSplitReport(null);
           setSplitSmilesColumn("");
           setSplitGroupColumn("");
@@ -640,6 +666,52 @@ export function DatasetsPage() {
       });
     }
   }, []);
+
+  // stage 5 (DS-3): the register verb — the engine re-reads the
+  // source column server-side (row-aligned), so the column pick (not
+  // the pulled display lane) arms the button
+  const handleRegisterFrames = useCallback(async () => {
+    if (selectedId === null || smilesColumn === "" || regBusy) {
+      return;
+    }
+    setRegBusy(true);
+    setRegError(null);
+    setRegReport(null);
+    try {
+      const response = await chemistryApi.registerFrames(selectedId, {
+        column: smilesColumn,
+        featurization: regFeaturization,
+        descriptorSet,
+        kind: fpKind,
+        radius,
+        nBits,
+        asCounts,
+        includeChirality: fpKind === "morgan" ? includeChirality : false,
+        target: null,
+        mode: "job",
+      });
+      if (response.mode === "job") {
+        setRegJobId(response.job.job_id);
+      }
+    } catch (error) {
+      setRegError(describeError(error));
+    } finally {
+      setRegBusy(false);
+    }
+  }, [selectedId, smilesColumn, regFeaturization, descriptorSet, fpKind, radius, nBits, asCounts, includeChirality, regBusy]);
+
+  const handleRegisterFramesResult = useCallback(
+    (result: unknown) => {
+      try {
+        setRegReport(parseFramesRegisterReport(result, "frames/register"));
+      } catch (error) {
+        setRegError(describeError(error));
+        return;
+      }
+      void refreshRegistry();
+    },
+    [refreshRegistry],
+  );
 
   // stage 6: the leakage-safe split (DS-1: strategy-aware when set)
   const handleSplit = useCallback(async () => {
@@ -1448,6 +1520,108 @@ export function DatasetsPage() {
                 <JobRunCard jobId={chemJobId} resultLabel="the featurization payload" onResult={handleChemResult} />
               </div>
             ) : null}
+
+            {/* stage 5 (DS-3): the register lane — the featurized frame as a
+                NEW derived dataset, closing the SMILES→features→model loop */}
+            <div className="mt-4 rounded-lg border border-[var(--color-border)] p-4">
+              <div className="flex items-center gap-2">
+                <Layers aria-hidden className="h-4 w-4 text-[var(--color-primary)]" />
+                <span className="text-sm font-medium text-[var(--color-foreground)]">Register as derived dataset</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="text-xs text-[var(--color-muted-foreground)]">
+                  featurization
+                  <select
+                    value={regFeaturization}
+                    onChange={(event) => setRegFeaturization(event.target.value as FramesFeaturization)}
+                    className="mt-1 w-40 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5 text-xs"
+                  >
+                    <option value="descriptors">descriptors (the set picked above)</option>
+                    <option value="fingerprints">fingerprints (the knobs picked above)</option>
+                  </select>
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={selectedId === null || smilesColumn === "" || regBusy}
+                  onClick={() => void handleRegisterFrames()}
+                >
+                  {regBusy ? "Registering…" : "Register as derived dataset"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
+                The engine re-reads the source column server-side (row-aligned)
+                and registers a NEW derived dataset: every source column (the
+                target included) plus the appended feature columns — the
+                source dataset is never modified. Rows the engine rejects are
+                reported, never silently dropped. Continue in Machine Learning
+                to train over the featurized frame.
+              </p>
+              {regError !== null ? <div className="mt-3"><ErrorBanner message={regError} /></div> : null}
+              {regJobId !== null ? (
+                <div className="mt-3">
+                  <JobRunCard jobId={regJobId} resultLabel="the registration report" onResult={handleRegisterFramesResult} />
+                </div>
+              ) : null}
+
+              {regReport !== null ? (
+                <div className="mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-muted)]/40 p-4">
+                  <p className="text-xs text-[var(--color-muted-foreground)]">
+                    {regReport.counts.n_rows} rows → {regReport.counts.kept} kept ·{" "}
+                    {regReport.counts.rejected} rejected · {regReport.counts.features_appended}{" "}
+                    feature columns appended ({regReport.featurization})
+                  </p>
+                  {regReport.rejected.length > 0 ? (
+                    <div className="mt-2 overflow-hidden rounded-md border border-[var(--color-border)]">
+                      <div className="max-h-48 overflow-auto">
+                        <table className="w-full border-collapse text-[11px]">
+                          <thead className="sticky top-0 bg-[var(--color-muted)]">
+                            <tr>
+                              <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">row</th>
+                              <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">input</th>
+                              <th scope="col" className="whitespace-nowrap px-2 py-1 text-left font-semibold">reason</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {regReport.rejected.map((entry) => (
+                              <tr key={entry.row} className="border-t border-[var(--color-border)]">
+                                <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.row}</td>
+                                <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.input}</td>
+                                <td className="px-2 py-1 text-[var(--color-muted-foreground)]">{entry.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-[var(--color-muted-foreground)]">
+                      derived dataset: {regReport.dataset.name} ({regReport.dataset.dataset_id}) ·{" "}
+                      {regReport.dataset.shape[0]} × {regReport.dataset.shape[1]} · provenance
+                      {" "}kind "{regReport.featurization === "descriptors" ? "derived-descriptors" : "derived-fingerprints"}" from{" "}
+                      {regReport.source_dataset_id} — the source is untouched
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void selectDataset(regReport.dataset.dataset_id)}
+                    >
+                      Select the derived dataset
+                    </Button>
+                    {onNavigate !== undefined ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onNavigate("machine-learning")}
+                      >
+                        Continue in Machine Learning
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </StageHeader>

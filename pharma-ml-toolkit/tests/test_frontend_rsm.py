@@ -95,16 +95,18 @@ def test_the_contract_carries_the_seven_new_paths() -> None:
     # CNN pair, the autoencoder pair, the GAN pair, the diffusion pair);
     # 142 -> 143 by the r378 GEN-2 metrics path (the pin left stale at
     # 142 in that round — caught and trued by the r379 DS-2 round);
-    # 143 -> 144 by the r379 DS-2 standardization path
-    assert len(paths) == 144, f"the contract drifted: {len(paths)} paths"
+    # 143 -> 144 by the r379 DS-2 standardization path; 144 -> 145 by
+    # the r380 DS-3 frames/register path
+    assert len(paths) == 145, f"the contract drifted: {len(paths)} paths"
     # 87 by the r365 part18 lanes; 87 -> 96 by the r367 part18 §5
     # DL architecture expansion (the four pairs' request DTOs)
     # 96 -> 97 by the r375 ML-3 train-lane split section (the
     # TrainSplitSpec request DTO, one schema; no new paths)
     # 97 -> 98 by the r378 GEN-2 GenerationMetricsRequest DTO (this
     # pin left stale at 97 in that round — caught and trued by the
-    # r379 DS-2 round); 98 -> 99 by the r379 DS-2 StandardizeRequest
-    assert len(schema["components"]["schemas"]) == 99
+    # r379 DS-2 round); 98 -> 99 by the r379 DS-2 StandardizeRequest;
+    # 99 -> 100 by the r380 DS-3 FramesRegisterRequest
+    assert len(schema["components"]["schemas"]) == 100
     for path in (
         "/api/v1/rsm/registry",
         "/api/v1/rsm/design",

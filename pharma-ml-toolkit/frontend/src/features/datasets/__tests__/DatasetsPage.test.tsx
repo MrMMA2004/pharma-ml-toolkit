@@ -80,11 +80,13 @@ const chemistryMocks = vi.hoisted(() => ({
   descriptors: vi.fn(),
   fingerprints: vi.fn(),
   standardize: vi.fn(),
+  registerFrames: vi.fn(),
 }));
 vi.mock("@/services/chemistry/client", async (importOriginal) => {
   // the real module keeps its types + parsers (the page narrows
-  // untrusted payloads through the REAL parseStandardizeReport);
-  // only the networked chemistryApi surface is mocked
+  // untrusted payloads through the REAL parseStandardizeReport /
+  // parseFramesRegisterReport); only the networked chemistryApi
+  // surface is mocked
   const actual = await importOriginal<typeof import("@/services/chemistry/client")>();
   return {
     ...actual,
@@ -92,6 +94,7 @@ vi.mock("@/services/chemistry/client", async (importOriginal) => {
       descriptors: chemistryMocks.descriptors,
       fingerprints: chemistryMocks.fingerprints,
       standardize: chemistryMocks.standardize,
+      registerFrames: chemistryMocks.registerFrames,
     },
   };
 });
@@ -150,6 +153,7 @@ beforeEach(() => {
   datasetsMocks.remove.mockReset();
   jobsMocks.result.mockReset();
   chemistryMocks.standardize.mockReset();
+  chemistryMocks.registerFrames.mockReset();
 });
 
 describe("the Import stage — file selection, submission, validation errors", () => {
@@ -757,5 +761,235 @@ describe("the Clean/Standardize stage — DS-2's derived-dataset action", () => 
     });
     expect(runButton).toBeDisabled();
     expect(chemistryMocks.standardize).not.toHaveBeenCalled();
+  });
+});
+
+describe("the Descriptor/Fingerprint register lane — DS-3's derived-dataset action", () => {
+  it("runs the register job and relays the report end-to-end: the honest counts, the rejected rows, the derived dataset's select action, the Machine-Learning navigate hint, the registry refresh", async () => {
+    jobState.snapshots["job-reg"] = {
+      view: {
+        state: "COMPLETED",
+        operation: "chemistry.frames.register",
+        progress: 100,
+        stage: "done",
+        error: null,
+        result_ready: true,
+      },
+    };
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    chemistryMocks.registerFrames.mockResolvedValueOnce({
+      mode: "job",
+      job: { job_id: "job-reg" },
+    });
+    jobsMocks.result.mockResolvedValueOnce({
+      result: {
+        source_dataset_id: "ds-1",
+        column: "smiles",
+        featurization: "descriptors",
+        counts: { n_rows: 8, kept: 6, rejected: 2, features_appended: 217 },
+        rejected: [
+          { row: 1, input: "not-a-smiles", reason: "unparseable" },
+          { row: 2, input: "[H]", reason: "descriptor-computation-failure" },
+        ],
+        provenance: {
+          kind: "derived-descriptors",
+          source_dataset_id: "ds-1",
+          column: "smiles",
+          descriptor_set: "morgan",
+          n_features: 217,
+          target: "solubility",
+        },
+        dataset: {
+          dataset_id: "ds-2-desc",
+          name: "solubility.csv (descriptors)",
+          shape: [6, 219],
+          columns: ["smiles", "solubility"],
+          target: "solubility",
+        },
+      },
+    });
+    const onNavigate = vi.fn();
+
+    render(<DatasetsPage onNavigate={onNavigate} />);
+    await waitFor(() => {
+      expect(datasetsMocks.list).toHaveBeenCalledTimes(1);
+    });
+
+    // select the registered dataset — the guessed SMILES column arms
+    // the register lane (no pull needed: the engine re-reads the
+    // source column server-side)
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    const registerButton = await screen.findByRole("button", {
+      name: "Register as derived dataset",
+    });
+    expect(registerButton).toBeEnabled();
+    await userEvent.click(registerButton);
+
+    await waitFor(() => {
+      expect(chemistryMocks.registerFrames).toHaveBeenCalledWith("ds-1", {
+        column: "smiles",
+        featurization: "descriptors",
+        descriptorSet: "morgan",
+        kind: "morgan",
+        radius: 2,
+        nBits: 2048,
+        asCounts: false,
+        includeChirality: false,
+        target: null,
+        mode: "job",
+      });
+    });
+
+    // the completed job relayed the report: the counts line, the
+    // honest rejected table, the derived identity, the registry
+    // refresh
+    await waitFor(() => {
+      expect(jobsMocks.result).toHaveBeenCalledWith("job-reg");
+      expect(datasetsMocks.list).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      await screen.findByText(
+        /8 rows → 6 kept · 2 rejected · 217 feature columns appended/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/not-a-smiles/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/descriptor-computation-failure/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/solubility\.csv \(descriptors\) \(ds-2-desc\)/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/kind "derived-descriptors" from ds-1/),
+    ).toBeInTheDocument();
+
+    // the navigate hint: the shell's own workspace switcher hands
+    // the workflow over to the ML stage
+    await userEvent.click(
+      screen.getByRole("button", { name: "Continue in Machine Learning" }),
+    );
+    expect(onNavigate).toHaveBeenCalledWith("machine-learning");
+
+    // the derived-dataset select action re-selects through the real lane
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select the derived dataset" }),
+    );
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-2-desc");
+      expect(datasetsMocks.preview).toHaveBeenCalledWith("ds-2-desc", 10);
+    });
+  });
+
+  it("switches the featurization select to the fingerprints branch — the request carries the branch + the fp knobs", async () => {
+    jobState.snapshots["job-reg-fp"] = {
+      view: {
+        state: "COMPLETED",
+        operation: "chemistry.frames.register",
+        progress: 100,
+        stage: "done",
+        error: null,
+        result_ready: true,
+      },
+    };
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    chemistryMocks.registerFrames.mockResolvedValueOnce({
+      mode: "job",
+      job: { job_id: "job-reg-fp" },
+    });
+    jobsMocks.result.mockResolvedValueOnce({
+      result: {
+        source_dataset_id: "ds-1",
+        column: "smiles",
+        featurization: "fingerprints",
+        counts: { n_rows: 8, kept: 7, rejected: 1, features_appended: 2048 },
+        rejected: [
+          { row: 1, input: "not-a-smiles", reason: "unparseable" },
+        ],
+        provenance: {
+          kind: "derived-fingerprints",
+          source_dataset_id: "ds-1",
+          column: "smiles",
+          fingerprint_kind: "morgan",
+          radius: 2,
+          n_bits: 2048,
+          as_counts: false,
+          include_chirality: false,
+          target: "solubility",
+        },
+        dataset: {
+          dataset_id: "ds-2-fp",
+          name: "solubility.csv (fingerprints)",
+          shape: [7, 2050],
+          columns: ["smiles", "solubility"],
+          target: "solubility",
+        },
+      },
+    });
+
+    render(<DatasetsPage />);
+    await waitFor(() => {
+      expect(datasetsMocks.list).toHaveBeenCalledTimes(1);
+    });
+    await userEvent.click(await screen.findByText("solubility.csv"));
+    await waitFor(() => {
+      expect(datasetsMocks.view).toHaveBeenCalledWith("ds-1");
+    });
+
+    // the featurization select: switch to the fingerprints branch
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "featurization" }),
+      "fingerprints",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Register as derived dataset" }),
+    );
+    await waitFor(() => {
+      expect(chemistryMocks.registerFrames).toHaveBeenCalledWith("ds-1", {
+        column: "smiles",
+        featurization: "fingerprints",
+        descriptorSet: "morgan",
+        kind: "morgan",
+        radius: 2,
+        nBits: 2048,
+        asCounts: false,
+        includeChirality: false,
+        target: null,
+        mode: "job",
+      });
+    });
+    expect(
+      await screen.findByText(
+        /kind "derived-fingerprints" from ds-1/,
+      ),
+    ).toBeInTheDocument();
+    // no navigate prop -> the hint button stays absent
+    expect(
+      screen.queryByRole("button", { name: "Continue in Machine Learning" }),
+    ).toBeNull();
+  });
+
+  it("gates the run honestly: no selected dataset or column — no request", async () => {
+    datasetsMocks.list.mockResolvedValue({ datasets: [DATASET] });
+    datasetsMocks.view.mockResolvedValue(DATASET);
+    datasetsMocks.preview.mockResolvedValue(FRAME);
+    render(<DatasetsPage />);
+    await waitFor(() => {
+      expect(datasetsMocks.list).toHaveBeenCalled();
+    });
+
+    // before a selection the register action is inert
+    const registerButton = screen.getByRole("button", {
+      name: "Register as derived dataset",
+    });
+    expect(registerButton).toBeDisabled();
+    expect(chemistryMocks.registerFrames).not.toHaveBeenCalled();
   });
 });

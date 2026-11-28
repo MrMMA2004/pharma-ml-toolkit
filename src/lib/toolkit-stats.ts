@@ -64,7 +64,16 @@
     collected / 0 errors over 445 files (the +7 over the r377 pin:
     the six GEN-2 metrics route tests in
     tests/api/test_dl_semi_generative.py + the metrics mirror guard). */
-export const SHIPPED_TEST_COUNT = 8347;
+/*  r380 re-true (the v1.2.252 DS-3 ship, measurement-last): the
+    collection re-measured live on the shipped tree -- 8,388
+    collected / 0 errors over 447 files (the +41 over the r378 pin:
+    the r379 DS-2 lane (9 API tests + 10 drift-guard tests + the
+    vitest pair) + the r380 DS-3 lane (10 API tests + 13 drift-guard
+    tests + the 3 vitests) + the notebook/contract churn; the r379
+    entry's claimed 8,366 re-true never rode its commit -- this pin
+    carries the LIVE measurement, caught and recorded honestly at
+    r380). */
+export const SHIPPED_TEST_COUNT = 8388;
 
 /*  r366 (the part18 all-phases verification pass, the owner-directed
     firing): the collection re-measured LIVE at the r365 terminal
@@ -128,7 +137,11 @@ export const SHIPPED_TEST_COUNT = 8347;
     suite re-measured live on the shipped tree -- 407/407 over 50
     files (the +2/+1 over the r377 pin: the GEN-2 MOSES metrics
     card page suite). */
-export const SHIPPED_COMPONENT_TEST_COUNT = 407;
+/*  r380 re-true (the v1.2.252 DS-3 ship, measurement-last): the
+    suite re-measured live on the shipped tree -- 412/412 over 50
+    files (the +5 over the r378 pin: the r379 DS-2 page pair + the
+    r380 DS-3 register-lane trio). */
+export const SHIPPED_COMPONENT_TEST_COUNT = 412;
 
 /*  r366 re-true: the vitest suite re-measured live at the r365
     terminal -- 346/346 over 39 files (54.36s). The r361-era pin 337
@@ -246,7 +259,15 @@ export const SHIPPED_COMPONENT_TEST_COUNT = 407;
     the toolkit dist-archive/ -- both homes accumulate per the ship
     convention; the +56.6 MB is exactly the two new 28,278,832-byte
     copies)). */
-export const SHIPPED_FILE_COUNT = 1931;
+/*  r380 re-true (the v1.2.252 DS-3 ship, measurement-last): the
+    offline census replica re-walked the toolkit tree at the
+    close-out fixed point -- 1,935 files / 172 dirs / 1,073,799,196 B
+    (the +4 files over the r378 pin: the r379 standardize-action
+    drift-guard file + the two 251 zip homes + the r380 frames-
+    register drift-guard file + the two 252 zip homes, less the two
+    251 predecessors the retention rule removed from the toolkit's
+    two in-tree homes). */
+export const SHIPPED_FILE_COUNT = 1935;
 
 /*  r366 re-true (measurement-last): the offline census replica
     re-walked the toolkit tree at the r365 terminal AFTER this
@@ -440,7 +461,13 @@ export const SHIPPED_FILE_COUNT = 1931;
     selector/readout) + the 16 new backend tests + the drift-guard
     extension + the CHANGELOG 1.2.247 entry + the roadmap's row-2
     execution log + the re-executed 1.2.247 notebook outputs). */
-export const SHIPPED_SOURCE_LINES = 607683;
+/*  r380 re-true (the v1.2.252 DS-3 ship, measurement-last): the
+    replica walk re-measured at the close-out fixed point --
+    610,717 lines (the +3,034 over the r378 pin: the r379 DS-2 lane
+    + the r380 DS-3 lane (the route + the drift guards + the page +
+    the client + the re-exported contract) + the re-executed
+    1.2.251/1.2.252 notebook outputs). */
+export const SHIPPED_SOURCE_LINES = 610717;
 
 /*  r366-continuation re-true (measurement-last): the firing's
     close-out correction (the drift-guard figure 202 -> 130 and the

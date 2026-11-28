@@ -83,7 +83,7 @@ export function App() {
           {entry.id === "introduction" ? (
             <IntroductionPage />
           ) : entry.id === "datasets" ? (
-            <DatasetsPage />
+            <DatasetsPage onNavigate={handleSelect} />
           ) : entry.id === "machine-learning" ? (
             <MLPage />
           ) : entry.id === "deep-learning" ? (

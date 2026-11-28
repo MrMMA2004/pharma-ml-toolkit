@@ -229,9 +229,10 @@ def test_the_contract_carries_the_registry_deletion_path() -> None:
     # CNN + autoencoder + GAN + diffusion pairs — none a registry path);
     # 142 -> 143 by the r378 GEN-2 metrics path (the pin left stale at
     # 142 in that round — caught and trued by the r379 DS-2 round);
-    # 143 -> 144 by the r379 DS-2 standardization path
-    assert len(paths) == 144, (
-        "the contract must pin 144 paths (the registry's DELETE rides the "
+    # 143 -> 144 by the r379 DS-2 standardization path; 144 -> 145 by
+    # the r380 DS-3 frames/register path
+    assert len(paths) == 145, (
+        "the contract must pin 145 paths (the registry's DELETE rides the "
         "existing trained-model path — no new path this lane; the r358 "
         "multiresponse quartet and the r359 rsm septet are their own "
         "lanes', not registry paths)"

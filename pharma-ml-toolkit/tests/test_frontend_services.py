@@ -406,6 +406,7 @@ def test_chemistry_rest_surface_covered() -> None:
         "/api/v1/chemistry/descriptors": {"POST"},
         "/api/v1/chemistry/fingerprints": {"POST"},
         "/api/v1/chemistry/standardize": {"POST"},  # DS-2 (row 6)
+        "/api/v1/chemistry/frames/register": {"POST"},  # DS-3 (row 7)
     }
     assert backend == expected, f"the backend chemistry routes moved: {backend}"
 
@@ -424,9 +425,11 @@ def test_chemistry_requests_use_the_generated_contract_types() -> None:
     assert 'from "@/types/api.d"' in client
     assert "DescriptorsRequest" in client and "FingerprintsRequest" in client
     assert "StandardizeRequest" in client
+    assert "FramesRegisterRequest" in client
     assert "interface DescriptorsRequest" not in client
     assert "interface FingerprintsRequest" not in client
     assert "interface StandardizeRequest" not in client
+    assert "interface FramesRegisterRequest" not in client
     # the engine's own cap is mirrored once, beside the route
     assert "CHEMISTRY_MAX_SMILES = 500" in client
 

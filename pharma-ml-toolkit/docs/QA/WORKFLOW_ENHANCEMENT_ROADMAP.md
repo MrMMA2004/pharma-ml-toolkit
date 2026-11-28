@@ -187,7 +187,7 @@ split) + `services/quality/client.ts` (the §15.4 data-quality report) +
 | Field | Entry |
 | --- | --- |
 | ID / Feature | DS-3 — "Register as dataset" for the Descriptor/Fingerprint stage's result frames |
-| Current status | Partial (chemistry route returns frames; the dataset-store registration Missing) |
+| Current status | **Implemented (round 380, v1.2.252)** — the `POST /api/v1/chemistry/frames/register` route over the real descriptor/fingerprint engines served (the SMILES column re-read server-side — the one row-aligned source of truth; the derived frame carrying every source column + the target + the appended feature columns; the source never mutated; the honest rejected-rows accounting); the Descriptor/Fingerprint stage renders the register block + the report card with the "continue in Machine Learning" handover, and the ML train lane over the derived id closes the SMILES→descriptors→model loop — the roadmap's own acceptance, API-tested. |
 | Problem | Stage 5 (`DatasetsPage.tsx:1042`) computes the real `rdkit_all` descriptor frame or fingerprint matrix through `POST /chemistry/descriptors|fingerprints`, but `handleChemResult` (`DatasetsPage.tsx:548`) only sets display state — the frames never enter the dataset store, so the ML/DL workspaces cannot train on the featurized matrix (their train routes read the registered dataset's own numeric columns; only the in-backend workflow templates compute descriptors internally). |
 | Proposed solution | Extend the chemistry route response (or add `POST /chemistry/frames/register`) with an optional `register: bool` that loads the returned frame through the existing `DatasetStore` registration path (target column optional) with `source_kind: "derived-descriptors|fingerprints"` provenance; stage 5 gains a register button + a link "continue in Machine Learning". |
 | Scientific value | Closes the classical QSAR loop inside the GUI: raw SMILES table → descriptors → model, which today only the backend template chains can do end-to-end. |
@@ -1033,6 +1033,38 @@ contract-count pins the r378 round left behind its own 143/98 growth
 caught and trued to 144/99; the contract re-exported at 144 paths /
 99 schemas. The next row is DS-3 (the descriptor/fingerprint frames
 registered as derived datasets).
+
+— execution log: **row 7 (DS-3) executed in round 380 at v1.2.252** —
+the `POST /api/v1/chemistry/frames/register` route over the real
+descriptor/fingerprint engines (the SMILES column re-read server-side
+— the one row-aligned source of truth; the derived dataset registered
+through the same load-and-register path every upload takes: every
+source column + the target included + the appended feature columns —
+217 rdkit_all descriptors or the `fp_0..fp_N` bit columns; the target
+optional — null inherits the source's own target+task, an explicit
+override must name an existing column with the task re-inferred; a
+feature-column collision with an existing source column refused
+honestly, never a silent pandas mangle); the ML loop closed
+(`POST /api/v1/ml/train` over the derived id — the roadmap's own
+acceptance clause, API-tested); the Descriptor/Fingerprint stage's
+register block (the featurization select riding the two cards' knobs,
+the register button armed by the column pick alone — no pull needed,
+the report card with the counts + the rejected table + the derived
+select + the "Continue in Machine Learning" navigate hint — the
+shell's own workspace switcher handed down to the page, the first
+cross-workspace handover in the Datasets flow); 10 API tests + 3
+vitests + the 13-test DS-3 drift guard (the featurization /
+descriptor-set / fingerprint-kind vocabularies pinned across route /
+contract / client, the no-write scan extended to the register body's
+staged copy+concat, the page + parser + navigate pins, the
+provenance-on-the-store pins with the duplicate-dict-key lesson —
+the fingerprints branch's kind rides `fingerprint_kind`, never a
+second `kind` key) + the chemistry mirror guard extended with the
+fourth request; the six contract-count pins trued proactively to
+145/100 (the r379 lesson applied: every count pin rides every
+contract-touching close-out); the contract re-exported at 145 paths /
+100 schemas. The next row is PK-1 (the paste-only PK/PD import vs
+the column bridge every other workflow already has).
 
 — trued round 372 (part21 / task 2-c): written read-only against the v1.2.244
 tree; every "zero frontend consumer" claim above was verified by diffing all
